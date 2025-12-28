@@ -1,7 +1,24 @@
-npm init -y
-npm install react react-dom
-npm install react-router-dom
-npm install react-scripts
-npm install @mui/material @emotion/react @emotion/styled
-npm install @mui/icons-material
-npm install react-pro-sidebar
+--App--
+    npm init -y
+    npm install react react-dom
+    npm install react-router-dom
+    npm install react-scripts
+    npm install @mui/material @emotion/react @emotion/styled
+    npm install @mui/icons-material
+    npm install react-pro-sidebar
+
+--Server--
+create:
+    - cd server
+    - npm install
+    - npm install
+remove:
+    - rm database.sqlite
+    - npm run init-db
+
+--Run application--
+root: 
+    - npm start
+server:
+    - cd server
+    - npm start OR npm run dev

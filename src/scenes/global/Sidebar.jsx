@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar as ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
 import { Box, Typography, useTheme } from "@mui/material";
 import { Link, useLocation } from "react-router-dom";
 import { tokens } from "../../theme";
+import { useAppContext } from "../../context/AppContext";
 import DashboardIcon from "@mui/icons-material/DashboardOutlined";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
+import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import BeachAccessOutlinedIcon from "@mui/icons-material/BeachAccessOutlined";
 
 const Item = ({ title, to, icon, selected, setSelected }) => {
   return (
@@ -19,12 +23,39 @@ const Item = ({ title, to, icon, selected, setSelected }) => {
   );
 };
 
+// Map icon names to actual icon components
+const getIcon = (iconName) => {
+  switch (iconName) {
+    case "dashboard":
+      return <DashboardIcon />;
+    case "people":
+      return <PeopleOutlinedIcon />;
+    case "settings":
+      return <SettingsOutlinedIcon />;
+    case "vacation":
+      return <BeachAccessOutlinedIcon />;
+    default:
+      return <DashboardIcon />;
+  }
+};
+
 const Sidebar = () => {
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selected, setSelected] = useState("Dashboard");
   const location = useLocation();
+  const { availableRoutes } = useAppContext();
+
+  // Sync selected state with current route
+  useEffect(() => {
+    const currentRoute = availableRoutes.find(
+      (route) => route.path === location.pathname
+    );
+    if (currentRoute) {
+      setSelected(currentRoute.name);
+    }
+  }, [location.pathname, availableRoutes]);
 
   return (
     <Box
@@ -152,23 +183,28 @@ const Sidebar = () => {
             backgroundColor: colors.primary[800],
           }}
         >
-          {/* Toggle button when collapsed - adjust marginTop to control Y position */}
+          {/* Toggle button when collapsed - absolutely positioned to align with Dashboard text */}
           {isCollapsed && (
-            <MenuItem
+            <Box
               onClick={() => setIsCollapsed(!isCollapsed)}
-              icon={<HomeOutlinedIcon />}
-              style={{
-                marginTop: "40px",
-                marginBottom: "50px",
+              sx={{
+                position: "absolute",
+                top: "60px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                cursor: "pointer",
+                zIndex: 10,
                 color: colors.primary[800],
               }}
-            />
+            >
+              <HomeOutlinedIcon sx={{ fontSize: "40px" }} />
+            </Box>
           )}
 
-          {/* Spacer to push menu items below the logo */}
-          {!isCollapsed && <Box sx={{ height: "160px" }} />}
+          {/* Consistent spacer for both states */}
+          <Box sx={{ height: "160px" }} />
 
-          {/* Menu Items */}
+          {/* Menu Items - dynamically rendered based on role */}
           <Box
             sx={{
               display: "flex",
@@ -177,13 +213,16 @@ const Sidebar = () => {
               width: "100%",
             }}
           >
-            <Item
-              title="Dashboard"
-              to="/"
-              icon={<DashboardIcon />}
-              selected={selected}
-              setSelected={setSelected}
-            />
+            {availableRoutes.map((route) => (
+              <Item
+                key={route.path}
+                title={route.name}
+                to={route.path}
+                icon={getIcon(route.icon)}
+                selected={selected}
+                setSelected={setSelected}
+              />
+            ))}
           </Box>
         </Menu>
       </ProSidebar>
