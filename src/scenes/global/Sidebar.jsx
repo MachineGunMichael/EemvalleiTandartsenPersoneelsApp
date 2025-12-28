@@ -9,6 +9,7 @@ import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import BeachAccessOutlinedIcon from "@mui/icons-material/BeachAccessOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 
 const Item = ({ title, to, icon, selected, setSelected }) => {
   return (
@@ -34,6 +35,8 @@ const getIcon = (iconName) => {
       return <SettingsOutlinedIcon />;
     case "vacation":
       return <BeachAccessOutlinedIcon />;
+    case "folder":
+      return <FolderOutlinedIcon />;
     default:
       return <DashboardIcon />;
   }

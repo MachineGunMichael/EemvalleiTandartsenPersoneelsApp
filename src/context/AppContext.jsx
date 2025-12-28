@@ -16,17 +16,20 @@ export const roleRoutes = {
   admin: [
     { path: "/", name: "Dashboard", icon: "dashboard" },
     { path: "/medewerkers", name: "Medewerkers", icon: "people" },
-    { path: "/instellingen", name: "Instellingen", icon: "settings" },
     { path: "/vakantie", name: "Vakantie", icon: "vacation" },
+    { path: "/documenten", name: "Documenten", icon: "folder" },
+    { path: "/instellingen", name: "Instellingen", icon: "settings" },
   ],
   manager: [
     { path: "/", name: "Dashboard", icon: "dashboard" },
     { path: "/medewerkers", name: "Medewerkers", icon: "people" },
     { path: "/vakantie", name: "Vakantie", icon: "vacation" },
+    { path: "/documenten", name: "Documenten", icon: "folder" },
   ],
   employee: [
     { path: "/", name: "Dashboard", icon: "dashboard" },
     { path: "/vakantie", name: "Vakantie", icon: "vacation" },
+    { path: "/documenten", name: "Documenten", icon: "folder" },
   ],
 };
 

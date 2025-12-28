@@ -88,6 +88,18 @@ const taupe = {
     900: "#3d352e",
 };
 
+const green = {
+    100: "#d4edda",
+    200: "#a9dbba",
+    300: "#7ec99b",
+    400: "#53b77b",
+    500: "#28a55c",
+    600: "#20844a",
+    700: "#186337",
+    800: "#104225",
+    900: "#082112",
+};
+
 // const yellow = {
 //   100: "#fffbd1",
 //   200: "#fff89e",
@@ -156,6 +168,7 @@ export const tokens = (mode) => ({
         orangeAccent: orange,
         purpleAccent: purple,
         taupeAccent: taupe,
+        greenAccent: green,
       }
     : {
         primary: {
@@ -198,6 +211,7 @@ export const tokens = (mode) => ({
         orangeAccent: orange,
         purpleAccent: purple,
         taupeAccent: taupe,
+        greenAccent: green,
       }),
 });
 

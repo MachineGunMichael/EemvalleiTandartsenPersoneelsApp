@@ -10,6 +10,7 @@ import Dashboard from "./scenes/dashboard";
 import Vakantie from "./scenes/vakantie";
 import Medewerkers from "./scenes/medewerkers";
 import Instellingen from "./scenes/instellingen";
+import Documenten from "./scenes/documenten";
 import Login from "./scenes/login";
 
 // Main layout with sidebar and topbar
@@ -77,6 +78,9 @@ function App() {
             )}
             {currentRole === "admin" && (
               <Route path="/instellingen" element={<Instellingen />} />
+            )}
+            {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee") && (
+              <Route path="/documenten" element={<Documenten />} />
             )}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
