@@ -1,0 +1,44 @@
+# ---- macOS
+.DS_Store
+
+# ---- Node / CRA
+node_modules/
+build/
+dist/
+*.log
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---- Secrets
+.env
+server/.env
+python-worker/.env
+
+# ---- SQLite
+server/db/sqlite/*.sqlite
+server/db/sqlite/*.sqlite-wal
+server/db/sqlite/*.sqlite-shm
+server/db/sqlite/*.db
+server/db/sqlite/*.db-*
+
+# ---- InfluxDB local data (if you keep it under server/.influxdb3)
+server/.influxdb3/
+server/influxdb3/
+influxdb3/
+
+# ---- Python (keep code, ignore env & artifacts)
+python-worker/.venv/
+python-worker/__pycache__/
+python-worker/.ipynb_checkpoints/
+python-worker/*.py[cod]
+python-worker/*.egg-info/
+python-worker/.pytest_cache/
+python-worker/.mypy_cache/
+python-worker/.ruff_cache/
+python-worker/.coverage
+python-worker/coverage.xml
+
+# ---- Editor/OS
+.vscode/
+*.swp.runtime-config*.json
