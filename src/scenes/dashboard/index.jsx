@@ -27,6 +27,32 @@ const Dashboard = () => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [contractHistory, setContractHistory] = useState([]);
+
+  // Helper functions
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat("nl-NL", {
+      style: "currency",
+      currency: "EUR",
+    }).format(value);
+  };
+
+  const formatPercentage = (value) => {
+    return `${value}%`;
+  };
+
+  const getMonthName = (month) => {
+    const months = [
+      "Januari", "Februari", "Maart", "April", "Mei", "Juni",
+      "Juli", "Augustus", "September", "Oktober", "November", "December"
+    ];
+    return months[month - 1] || "";
+  };
+
+  const capitalize = (str) => {
+    if (!str) return "";
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  };
 
   // ============================================
   // TABLE COLOR CONFIGURATION
@@ -91,18 +117,26 @@ const Dashboard = () => {
     }
   }, [currentRole, user]);
 
-  // Helper function to format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("nl-NL", {
-      style: "currency",
-      currency: "EUR",
-    }).format(amount);
-  };
+  // Fetch contract history for employee role
+  useEffect(() => {
+    const fetchContractHistory = async () => {
+      if (currentRole !== "employee" || !user?.employee_id) return;
+      
+      try {
+        const response = await fetch(
+          `http://localhost:5001/api/employees/${user.employee_id}/contract-history`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setContractHistory(data || []);
+        }
+      } catch (err) {
+        console.error("Error fetching contract history:", err);
+      }
+    };
 
-  // Helper function to format percentage
-  const formatPercentage = (value) => {
-    return `${value}%`;
-  };
+    fetchContractHistory();
+  }, [currentRole, user]);
 
   // Helper function to get dienstverband chip color
   const getDienstverbandColor = (type) => {
@@ -116,12 +150,6 @@ const Dashboard = () => {
       default:
         return colors.grey[500];
     }
-  };
-
-  // Helper function to capitalize first letter
-  const capitalize = (str) => {
-    if (!str) return "-";
-    return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
   return (
@@ -256,13 +284,15 @@ const Dashboard = () => {
                       sx={{
                         display: "inline-flex",
                         alignItems: "center",
-                        backgroundColor: colors.taupeAccent[100],
+                        backgroundColor: employee.available_hours > 0 
+                          ? colors.taupeAccent[400] 
+                          : colors.primary[300],
                         px: 1.5,
                         py: 0.5,
                         borderRadius: "8px",
                       }}
                     >
-                      <Typography fontWeight="500" color={colors.taupeAccent[700]}>
+                      <Typography fontWeight="500" color={colors.primary[900]}>
                         {employee.available_hours !== null 
                           ? `${employee.available_hours} uur` 
                           : "-"}
@@ -275,14 +305,14 @@ const Dashboard = () => {
                         display: "inline-flex",
                         alignItems: "center",
                         backgroundColor: employee.used_hours > 0 
-                          ? colors.taupeAccent[200] 
-                          : colors.primary[200],
+                          ? colors.taupeAccent[400] 
+                          : colors.primary[300],
                         px: 1.5,
                         py: 0.5,
                         borderRadius: "8px",
                       }}
                     >
-                      <Typography fontWeight="500" color={colors.primary[700]}>
+                      <Typography fontWeight="500" color={colors.primary[900]}>
                         {employee.used_hours !== null 
                           ? `${employee.used_hours} uur` 
                           : "-"}
@@ -294,6 +324,82 @@ const Dashboard = () => {
             </TableBody>
           </Table>
         </TableContainer>
+      )}
+
+      {/* Contract History for Employee Role Only */}
+      {currentRole === "employee" && !loading && contractHistory.length > 0 && (
+        <>
+          <Typography variant="h4" fontWeight="600" color={tableColors.cells.text} mt={5} mb={2}>
+            Contract Geschiedenis
+          </Typography>
+          <TableContainer
+            component={Paper}
+            sx={{
+              backgroundColor: tableColors.container.background,
+              borderRadius: "12px",
+              boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+              overflow: "hidden",
+            }}
+          >
+            <Table>
+              <TableHead>
+                <TableRow
+                  sx={{
+                    backgroundColor: tableColors.header.background,
+                    "& th:first-of-type": { borderTopLeftRadius: "12px", pl: 3 },
+                    "& th:last-of-type": { borderTopRightRadius: "12px" },
+                    "& th": {
+                      fontWeight: "bold",
+                      color: tableColors.header.text,
+                      fontSize: "14px",
+                      borderBottom: `2px solid ${colors.taupeAccent[300]}`,
+                      py: 2.5,
+                    },
+                  }}
+                >
+                  <TableCell>Periode</TableCell>
+                  <TableCell>Dienstverband</TableCell>
+                  <TableCell>Uren/week</TableCell>
+                  <TableCell>Bruto uurloon</TableCell>
+                  <TableCell>Vakantietoeslag</TableCell>
+                  <TableCell>Bonus</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody
+                sx={{
+                  "& tr:last-of-type td:first-of-type": { borderBottomLeftRadius: "12px" },
+                  "& tr:last-of-type td:last-of-type": { borderBottomRightRadius: "12px" },
+                }}
+              >
+                {contractHistory.map((contract, idx) => (
+                  <TableRow
+                    key={contract.id || idx}
+                    sx={{
+                      "&:nth-of-type(odd)": { backgroundColor: tableColors.cells.backgroundOdd },
+                      "&:nth-of-type(even)": { backgroundColor: tableColors.cells.backgroundEven },
+                      "&:hover": { backgroundColor: tableColors.cells.backgroundHover },
+                      "& td": {
+                        borderBottom: `1px solid ${colors.primary[200]}`,
+                        py: 2,
+                        color: tableColors.cells.text,
+                      },
+                      "& td:first-of-type": { pl: 3 },
+                    }}
+                  >
+                    <TableCell>
+                      {getMonthName(contract.month)} {contract.year}
+                    </TableCell>
+                    <TableCell>{capitalize(contract.dienstverband)}</TableCell>
+                    <TableCell>{contract.hours_per_week} uur</TableCell>
+                    <TableCell>{formatCurrency(contract.hourly_rate)}</TableCell>
+                    <TableCell>{formatPercentage(contract.vakantietoeslag_percentage)}</TableCell>
+                    <TableCell>{formatPercentage(contract.bonus_percentage)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
 
       {/* Empty State */}

@@ -114,6 +114,31 @@ db.serialize(() => {
     }
   );
 
+  // Create holiday_transactions table (tracking when hours are added/used)
+  db.run(
+    `
+    CREATE TABLE IF NOT EXISTS holiday_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      transaction_date DATE NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('added', 'used')),
+      hours REAL NOT NULL,
+      description TEXT,
+      balance_after REAL NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  `,
+    (err) => {
+      if (err) {
+        console.error("Error creating holiday_transactions table:", err.message);
+      } else {
+        console.log("Holiday transactions table created successfully.");
+      }
+    }
+  );
+
   // Hash passwords
   const adminPassword = bcrypt.hashSync("admin", 10);
   const duyguPassword = bcrypt.hashSync("duygu123", 10);

@@ -519,6 +519,157 @@ app.put("/api/employees/:id/holidays", (req, res) => {
   });
 });
 
+// Get full contract history for an employee (sorted by newest first)
+app.get("/api/employees/:id/contract-history", (req, res) => {
+  const employeeId = req.params.id;
+
+  const query = `
+    SELECT ec.*, u.name as employee_name
+    FROM employee_contracts ec
+    JOIN employees e ON ec.employee_id = e.id
+    JOIN users u ON e.user_id = u.id
+    WHERE ec.employee_id = ?
+    ORDER BY ec.year DESC, ec.month DESC
+  `;
+
+  db.all(query, [employeeId], (err, rows) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Add a new contract record (doesn't replace, just adds)
+app.post("/api/employees/:id/contracts", (req, res) => {
+  const employeeId = req.params.id;
+  const { year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage } = req.body;
+
+  if (!year || !month || !dienstverband || hours_per_week === undefined || hourly_rate === undefined) {
+    return res.status(400).json({ message: "Alle velden zijn verplicht" });
+  }
+
+  const query = `
+    INSERT OR REPLACE INTO employee_contracts 
+    (employee_id, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.run(
+    query,
+    [employeeId, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
+    function (err) {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      res.status(201).json({ message: "Contract toegevoegd", id: this.lastID });
+    }
+  );
+});
+
+// Get holiday transactions for an employee
+app.get("/api/employees/:id/holiday-transactions", (req, res) => {
+  const employeeId = req.params.id;
+  const year = req.query.year;
+
+  let query = `
+    SELECT * FROM holiday_transactions
+    WHERE employee_id = ?
+  `;
+  const params = [employeeId];
+
+  if (year) {
+    query += ` AND year = ?`;
+    params.push(year);
+  }
+
+  query += ` ORDER BY transaction_date ASC, id ASC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Add holiday hours transaction
+app.post("/api/employees/:id/holiday-transactions", (req, res) => {
+  const employeeId = req.params.id;
+  const { year, transaction_date, type, hours, description } = req.body;
+
+  if (!year || !transaction_date || !type || !hours) {
+    return res.status(400).json({ message: "Alle velden zijn verplicht" });
+  }
+
+  if (type !== 'added' && type !== 'used') {
+    return res.status(400).json({ message: "Type moet 'added' of 'used' zijn" });
+  }
+
+  // First get current balance
+  db.get(
+    "SELECT available_hours, used_hours FROM employee_holidays WHERE employee_id = ? AND year = ?",
+    [employeeId, year],
+    (err, holiday) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      let currentAvailable = holiday ? holiday.available_hours : 0;
+      let currentUsed = holiday ? holiday.used_hours : 0;
+      let newAvailable, newUsed, balanceAfter;
+
+      if (type === 'added') {
+        newAvailable = currentAvailable + parseFloat(hours);
+        newUsed = currentUsed;
+        balanceAfter = newAvailable - newUsed;
+      } else {
+        newAvailable = currentAvailable;
+        newUsed = currentUsed + parseFloat(hours);
+        balanceAfter = newAvailable - newUsed;
+      }
+
+      // Insert transaction
+      db.run(
+        `INSERT INTO holiday_transactions (employee_id, year, transaction_date, type, hours, description, balance_after)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [employeeId, year, transaction_date, type, hours, description || '', balanceAfter],
+        function (transErr) {
+          if (transErr) {
+            console.error("Database error:", transErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          // Update employee_holidays table
+          db.run(
+            `INSERT OR REPLACE INTO employee_holidays (employee_id, year, available_hours, used_hours, updated_at)
+             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+            [employeeId, year, newAvailable, newUsed],
+            (updateErr) => {
+              if (updateErr) {
+                console.error("Database error:", updateErr.message);
+                return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+              }
+
+              res.status(201).json({
+                message: type === 'added' ? "Uren toegevoegd" : "Uren gebruikt",
+                transaction_id: this.lastID,
+                balance_after: balanceAfter,
+                available_hours: newAvailable,
+                used_hours: newUsed
+              });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
 // Start server
 const startServer = async () => {
   try {
