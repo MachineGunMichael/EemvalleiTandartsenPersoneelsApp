@@ -3,21 +3,21 @@ import { Box, Typography, useTheme, Select, MenuItem, FormControl } from "@mui/m
 import { ResponsiveLine } from "@nivo/line";
 import { tokens } from "../theme";
 
-const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", titleVariant = "h4", containerPadding = 4 }) => {
+const OvertimeChart = ({ overtimeTransactions, title = "Overuren Verloop", titleVariant = "h4", containerPadding = 4 }) => {
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
   const isDarkMode = theme.palette.mode === "dark";
 
   // Get available years from transactions
   const availableYears = useMemo(() => {
-    if (!holidayTransactions || !holidayTransactions.length) return [new Date().getFullYear()];
+    if (!overtimeTransactions || !overtimeTransactions.length) return [new Date().getFullYear()];
     const years = new Set();
-    holidayTransactions.forEach((t) => {
+    overtimeTransactions.forEach((t) => {
       const year = new Date(t.transaction_date).getFullYear();
       years.add(year);
     });
     return Array.from(years).sort((a, b) => b - a); // Most recent first
-  }, [holidayTransactions]);
+  }, [overtimeTransactions]);
 
   const [selectedYear, setSelectedYear] = useState(availableYears[0] || new Date().getFullYear());
 
@@ -29,7 +29,7 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", ti
     }
   }, [availableYears, selectedYear]);
 
-  // Table colors for container styling
+  // Table colors for container styling - identical to HolidayChart
   const tableColors = {
     cells: {
       text: isDarkMode ? colors.primary[900] : colors.primary[800],
@@ -39,7 +39,7 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", ti
     },
   };
 
-  // Chart theme
+  // Chart theme - identical to HolidayChart
   const chartTheme = {
     axis: {
       ticks: {
@@ -101,9 +101,9 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", ti
 
   // Build chart data from transactions, filtered by selected year (using Date objects for time scale)
   const chartData = useMemo(() => {
-    if (!holidayTransactions || !holidayTransactions.length) return [];
+    if (!overtimeTransactions || !overtimeTransactions.length) return [];
 
-    const sorted = [...holidayTransactions].sort((a, b) => {
+    const sorted = [...overtimeTransactions].sort((a, b) => {
       const dateCompare = new Date(a.transaction_date) - new Date(b.transaction_date);
       if (dateCompare !== 0) return dateCompare;
       return a.id - b.id; // Older transactions (lower id) first for same date
@@ -139,7 +139,7 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", ti
     sorted.forEach((t, idx) => {
       const tDate = new Date(t.transaction_date);
       if (tDate >= yearStart && tDate <= yearEnd) {
-        if (t.type === "used" && idx > 0) {
+        if ((t.type === "converted_to_holiday" || t.type === "paid_out") && idx > 0) {
           const prevBalance = sorted[idx - 1].balance_after;
           dataPoints.push({
             x: tDate,
@@ -172,14 +172,14 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", ti
 
     return [
       {
-        id: "Vakantie-uren",
+        id: "Overuren",
         color: colors.taupeAccent[500],
         data: dataPoints,
       },
     ];
-  }, [holidayTransactions, colors.taupeAccent, selectedYear]);
+  }, [overtimeTransactions, colors.taupeAccent, selectedYear]);
 
-  // Don't render if no data
+  // Don't render if no data - identical styling to HolidayChart
   if (!chartData.length || !chartData[0].data.length) {
     return (
       <Box
@@ -337,7 +337,7 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", ti
                   variant="body2"
                   sx={{ color: isDarkMode ? "#eee" : "#111", fontWeight: "bold", mb: 0.5 }}
                 >
-                  Vakantie-uren
+                  Overuren
                 </Typography>
                 <Typography variant="body2" sx={{ color: isDarkMode ? "#eee" : "#111" }}>
                   Datum: {formatTimeLabel(point.data.x)}
@@ -359,4 +359,4 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop", ti
   );
 };
 
-export default HolidayChart;
+export default OvertimeChart;

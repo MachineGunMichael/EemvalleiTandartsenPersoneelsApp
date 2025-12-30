@@ -143,7 +143,7 @@ const connectDB = () => {
           CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            type TEXT NOT NULL CHECK(type IN ('vacation_request', 'vacation_approved', 'vacation_rejected')),
+            type TEXT NOT NULL CHECK(type IN ('vacation_request', 'vacation_approved', 'vacation_rejected', 'overtime_request', 'overtime_approved', 'overtime_rejected')),
             reference_id INTEGER,
             message TEXT NOT NULL,
             is_read INTEGER DEFAULT 0,
@@ -153,6 +153,67 @@ const connectDB = () => {
         `, (err) => {
           if (err && !err.message.includes('already exists')) {
             console.error("Error creating notifications table:", err.message);
+          }
+        });
+        
+        // Create employee_overtime table (yearly tracking)
+        db.run(`
+          CREATE TABLE IF NOT EXISTS employee_overtime (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            total_hours REAL NOT NULL DEFAULT 0,
+            converted_hours REAL NOT NULL DEFAULT 0,
+            paid_hours REAL NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            UNIQUE(employee_id, year)
+          )
+        `, (err) => {
+          if (err && !err.message.includes('already exists')) {
+            console.error("Error creating employee_overtime table:", err.message);
+          }
+        });
+        
+        // Create overtime_transactions table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS overtime_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            transaction_date DATE NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('added', 'converted', 'paid')),
+            hours REAL NOT NULL,
+            description TEXT,
+            balance_after REAL NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+          )
+        `, (err) => {
+          if (err && !err.message.includes('already exists')) {
+            console.error("Error creating overtime_transactions table:", err.message);
+          }
+        });
+        
+        // Create overtime_requests table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS overtime_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            request_date DATE NOT NULL,
+            hours REAL NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+            reviewed_by INTEGER,
+            reviewed_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            FOREIGN KEY (reviewed_by) REFERENCES users(id)
+          )
+        `, (err) => {
+          if (err && !err.message.includes('already exists')) {
+            console.error("Error creating overtime_requests table:", err.message);
           }
         });
         
@@ -544,7 +605,9 @@ app.get("/api/employees", (req, res) => {
       cws.thursday_hours,
       cws.friday_hours,
       cws.saturday_hours,
-      cws.sunday_hours
+      cws.sunday_hours,
+      (SELECT COALESCE(SUM(CASE WHEN type = 'added' THEN hours ELSE -hours END), 0) 
+       FROM overtime_transactions WHERE employee_id = e.id) as overtime_balance
     FROM employees e
     JOIN users u ON e.user_id = u.id
     LEFT JOIN employee_contracts ec ON ec.id = (
@@ -636,7 +699,9 @@ app.get("/api/employees/user/:userId", (req, res) => {
       cws.thursday_hours,
       cws.friday_hours,
       cws.saturday_hours,
-      cws.sunday_hours
+      cws.sunday_hours,
+      (SELECT COALESCE(SUM(CASE WHEN type = 'added' THEN hours ELSE -hours END), 0) 
+       FROM overtime_transactions WHERE employee_id = e.id) as overtime_balance
     FROM employees e
     JOIN users u ON e.user_id = u.id
     LEFT JOIN employee_contracts ec ON ec.id = (
@@ -1518,6 +1583,588 @@ app.put("/api/notifications/:userId/read-all", (req, res) => {
         return res.status(500).json({ message: "Er is een serverfout opgetreden" });
       }
       res.json({ message: "Alle notificaties gelezen" });
+    }
+  );
+});
+
+// ==================== OVERTIME ====================
+
+// Helper function to recalculate overtime balances
+function recalculateOvertimeBalances(employeeId, callback) {
+  db.all(
+    `SELECT * FROM overtime_transactions WHERE employee_id = ? ORDER BY transaction_date ASC, id ASC`,
+    [employeeId],
+    (err, transactions) => {
+      if (err || !transactions || transactions.length === 0) {
+        if (callback) callback();
+        return;
+      }
+
+      let runningBalance = 0;
+      const yearlySummary = {};
+
+      const updatePromises = transactions.map((t) => {
+        return new Promise((resolve) => {
+          if (t.type === 'added') {
+            runningBalance += parseFloat(t.hours);
+          } else {
+            runningBalance -= parseFloat(t.hours);
+          }
+
+          // Track yearly totals
+          if (!yearlySummary[t.year]) {
+            yearlySummary[t.year] = { total: 0, converted: 0, paid: 0 };
+          }
+          if (t.type === 'added') {
+            yearlySummary[t.year].total += parseFloat(t.hours);
+          } else if (t.type === 'converted') {
+            yearlySummary[t.year].converted += parseFloat(t.hours);
+          } else if (t.type === 'paid') {
+            yearlySummary[t.year].paid += parseFloat(t.hours);
+          }
+
+          db.run(
+            `UPDATE overtime_transactions SET balance_after = ? WHERE id = ?`,
+            [runningBalance, t.id],
+            () => resolve()
+          );
+        });
+      });
+
+      Promise.all(updatePromises).then(() => {
+        const yearUpdates = Object.entries(yearlySummary).map(([year, totals]) => {
+          return new Promise((resolve) => {
+            db.run(
+              `INSERT OR REPLACE INTO employee_overtime (employee_id, year, total_hours, converted_hours, paid_hours, updated_at)
+               VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+              [employeeId, year, totals.total, totals.converted, totals.paid],
+              () => resolve()
+            );
+          });
+        });
+
+        Promise.all(yearUpdates).then(() => {
+          if (callback) callback();
+        });
+      });
+    }
+  );
+}
+
+// Get employee overtime summary (yearly)
+app.get("/api/employees/:id/overtime", (req, res) => {
+  const employeeId = req.params.id;
+
+  db.all(
+    `SELECT * FROM employee_overtime WHERE employee_id = ? ORDER BY year DESC`,
+    [employeeId],
+    (err, rows) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      res.json(rows || []);
+    }
+  );
+});
+
+// Get overtime transactions for an employee
+app.get("/api/employees/:id/overtime-transactions", (req, res) => {
+  const employeeId = req.params.id;
+  const year = req.query.year;
+
+  let query = `SELECT * FROM overtime_transactions WHERE employee_id = ?`;
+  const params = [employeeId];
+
+  if (year) {
+    query += ` AND year = ?`;
+    params.push(year);
+  }
+
+  query += ` ORDER BY transaction_date ASC, id ASC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Add overtime transaction directly (for admin/manager adding hours)
+app.post("/api/employees/:id/overtime-transactions", (req, res) => {
+  const employeeId = req.params.id;
+  const { year, transaction_date, type, hours, description } = req.body;
+
+  if (!year || !transaction_date || !type || hours === undefined) {
+    return res.status(400).json({ message: "Alle velden zijn verplicht" });
+  }
+
+  if (!['added', 'converted', 'paid'].includes(type)) {
+    return res.status(400).json({ message: "Type moet 'added', 'converted' of 'paid' zijn" });
+  }
+
+  // Get last balance before this transaction
+  db.get(
+    `SELECT balance_after FROM overtime_transactions 
+     WHERE employee_id = ? AND (transaction_date < ? OR (transaction_date = ? AND id < (SELECT COALESCE(MAX(id), 0) + 1 FROM overtime_transactions)))
+     ORDER BY transaction_date DESC, id DESC 
+     LIMIT 1`,
+    [employeeId, transaction_date, transaction_date],
+    (err, prevTransaction) => {
+      const prevBalance = prevTransaction ? prevTransaction.balance_after : 0;
+      let newBalance;
+      
+      if (type === 'added') {
+        newBalance = prevBalance + parseFloat(hours);
+      } else {
+        newBalance = prevBalance - parseFloat(hours);
+      }
+
+      db.run(
+        `INSERT INTO overtime_transactions (employee_id, year, transaction_date, type, hours, description, balance_after)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [employeeId, year, transaction_date, type, Math.abs(hours), description || '', newBalance],
+        function(transErr) {
+          if (transErr) {
+            console.error("Database error:", transErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          recalculateOvertimeBalances(employeeId, () => {
+            res.status(201).json({
+              message: type === 'added' ? "Overuren toegevoegd" : type === 'converted' ? "Overuren omgezet" : "Overuren uitbetaald",
+              transaction_id: this.lastID,
+              balance_after: newBalance
+            });
+          });
+        }
+      );
+    }
+  );
+});
+
+// Delete overtime transaction
+app.delete("/api/overtime-transactions/:id", (req, res) => {
+  const transactionId = req.params.id;
+
+  db.get(
+    "SELECT employee_id FROM overtime_transactions WHERE id = ?",
+    [transactionId],
+    (err, transaction) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      if (!transaction) {
+        return res.status(404).json({ message: "Transactie niet gevonden" });
+      }
+
+      const employeeId = transaction.employee_id;
+
+      db.run("DELETE FROM overtime_transactions WHERE id = ?", [transactionId], function(deleteErr) {
+        if (deleteErr) {
+          console.error("Database error:", deleteErr.message);
+          return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+        }
+
+        if (this.changes === 0) {
+          return res.status(404).json({ message: "Transactie niet gevonden" });
+        }
+
+        recalculateOvertimeBalances(employeeId, () => {
+          res.json({ message: "Transactie verwijderd", id: transactionId });
+        });
+      });
+    }
+  );
+});
+
+// Convert overtime to vacation hours
+app.post("/api/employees/:id/overtime-to-vacation", (req, res) => {
+  const employeeId = req.params.id;
+  const { hours, description } = req.body;
+
+  if (!hours || hours <= 0) {
+    return res.status(400).json({ message: "Voer een geldig aantal uren in" });
+  }
+
+  // Check if employee has enough overtime balance
+  db.get(
+    `SELECT COALESCE(SUM(CASE WHEN type = 'added' THEN hours ELSE -hours END), 0) as balance
+     FROM overtime_transactions WHERE employee_id = ?`,
+    [employeeId],
+    (err, result) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      const currentBalance = result ? result.balance : 0;
+      if (currentBalance < hours) {
+        return res.status(400).json({ message: `Onvoldoende overuren. Beschikbaar: ${currentBalance} uur` });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const year = new Date().getFullYear();
+
+      // Add overtime transaction (converted)
+      db.run(
+        `INSERT INTO overtime_transactions (employee_id, year, transaction_date, type, hours, description, balance_after)
+         VALUES (?, ?, ?, 'converted', ?, ?, ?)`,
+        [employeeId, year, today, hours, description || 'Omgezet naar vakantie-uren', currentBalance - hours],
+        function(otErr) {
+          if (otErr) {
+            console.error("Database error:", otErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          // Add holiday transaction
+          db.get(
+            `SELECT balance_after FROM holiday_transactions 
+             WHERE employee_id = ? ORDER BY transaction_date DESC, id DESC LIMIT 1`,
+            [employeeId],
+            (err, lastHoliday) => {
+              const holidayBalance = lastHoliday ? lastHoliday.balance_after : 0;
+              const newHolidayBalance = holidayBalance + hours;
+
+              db.run(
+                `INSERT INTO holiday_transactions (employee_id, year, transaction_date, type, hours, description, balance_after)
+                 VALUES (?, ?, ?, 'added', ?, ?, ?)`,
+                [employeeId, year, today, hours, 'Omgezet van overuren', newHolidayBalance],
+                function(htErr) {
+                  if (htErr) {
+                    console.error("Database error:", htErr.message);
+                    return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+                  }
+
+                  // Recalculate both balances
+                  recalculateOvertimeBalances(employeeId, () => {
+                    recalculateBalances(db, employeeId, () => {
+                      res.status(201).json({
+                        message: `${hours} overuren omgezet naar vakantie-uren`,
+                        overtime_balance: currentBalance - hours,
+                        holiday_balance: newHolidayBalance
+                      });
+                    });
+                  });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Payout overtime hours
+app.post("/api/employees/:id/overtime-payout", (req, res) => {
+  const employeeId = req.params.id;
+  const { hours, description } = req.body;
+
+  if (!hours || hours <= 0) {
+    return res.status(400).json({ message: "Voer een geldig aantal uren in" });
+  }
+
+  // Check if employee has enough overtime balance
+  db.get(
+    `SELECT COALESCE(SUM(CASE WHEN type = 'added' THEN hours ELSE -hours END), 0) as balance
+     FROM overtime_transactions WHERE employee_id = ?`,
+    [employeeId],
+    (err, result) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      const currentBalance = result ? result.balance : 0;
+      if (currentBalance < hours) {
+        return res.status(400).json({ message: `Onvoldoende overuren. Beschikbaar: ${currentBalance} uur` });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const year = new Date().getFullYear();
+
+      db.run(
+        `INSERT INTO overtime_transactions (employee_id, year, transaction_date, type, hours, description, balance_after)
+         VALUES (?, ?, ?, 'paid', ?, ?, ?)`,
+        [employeeId, year, today, hours, description || 'Uitbetaald', currentBalance - hours],
+        function(transErr) {
+          if (transErr) {
+            console.error("Database error:", transErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          recalculateOvertimeBalances(employeeId, () => {
+            res.status(201).json({
+              message: `${hours} overuren uitbetaald`,
+              balance_after: currentBalance - hours
+            });
+          });
+        }
+      );
+    }
+  );
+});
+
+// ==================== OVERTIME REQUESTS ====================
+
+// Create overtime request
+app.post("/api/overtime-requests", (req, res) => {
+  const { employee_id, user_id, request_date, hours, description } = req.body;
+
+  if (!employee_id || !request_date || !hours) {
+    return res.status(400).json({ message: "Alle verplichte velden moeten worden ingevuld" });
+  }
+
+  db.run(
+    `INSERT INTO overtime_requests (employee_id, request_date, hours, description, status)
+     VALUES (?, ?, ?, ?, 'pending')`,
+    [employee_id, request_date, hours, description || ''],
+    function(err) {
+      if (err) {
+        console.error("Error creating overtime request:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      const requestId = this.lastID;
+
+      // Get requester info for notification
+      db.get(
+        `SELECT u.name, u.role FROM users u 
+         JOIN employees e ON u.id = e.user_id 
+         WHERE e.id = ?`,
+        [employee_id],
+        (err, requester) => {
+          if (err) {
+            console.error("Error fetching requester:", err.message);
+            return res.status(201).json({ id: requestId, message: "Aanvraag ingediend" });
+          }
+
+          let targetRole = requester.role === 'manager' ? 'admin' : 'manager';
+          const notificationMessage = `${requester.name} heeft ${hours} overuren aangevraagd voor ${request_date}`;
+
+          db.all(
+            `SELECT id, email, name FROM users WHERE role = ? AND is_active = 1`,
+            [targetRole],
+            (err, reviewers) => {
+              const sendNotificationsAndEmails = (users) => {
+                users.forEach(user => {
+                  createNotification(user.id, 'overtime_request', requestId, notificationMessage);
+
+                  const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                      <h2 style="color: #8B7355;">Overuren Aanvraag</h2>
+                      <p>Beste ${user.name},</p>
+                      <p><strong>${requester.name}</strong> heeft een overuren aanvraag ingediend:</p>
+                      <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p><strong>Datum:</strong> ${request_date}</p>
+                        <p><strong>Aantal uren:</strong> ${hours}</p>
+                        ${description ? `<p><strong>Beschrijving:</strong> ${description}</p>` : ''}
+                      </div>
+                      <p>Log in op het personeelsportaal om de aanvraag te beoordelen.</p>
+                      <p style="color: #888; font-size: 12px;">Eemvallei Tandartsen - Personeelsportaal</p>
+                    </div>
+                  `;
+                  sendEmailNotification(user.email, `Overuren aanvraag van ${requester.name}`, emailHtml);
+                });
+              };
+
+              if (err || !reviewers || reviewers.length === 0) {
+                db.all(`SELECT id, email, name FROM users WHERE role = 'admin' AND is_active = 1`, (err, admins) => {
+                  if (admins && admins.length > 0) {
+                    sendNotificationsAndEmails(admins);
+                  }
+                });
+              } else {
+                sendNotificationsAndEmails(reviewers);
+              }
+            }
+          );
+
+          res.status(201).json({ id: requestId, message: "Aanvraag ingediend" });
+        }
+      );
+    }
+  );
+});
+
+// Get pending overtime requests
+app.get("/api/overtime-requests", (req, res) => {
+  const { status, reviewer_role } = req.query;
+
+  let query = `
+    SELECT otr.*, u.name as employee_name, u.role as employee_role
+    FROM overtime_requests otr
+    JOIN employees e ON otr.employee_id = e.id
+    JOIN users u ON e.user_id = u.id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (status) {
+    query += ` AND otr.status = ?`;
+    params.push(status);
+  }
+
+  if (reviewer_role === 'manager') {
+    query += ` AND u.role = 'employee'`;
+  } else if (reviewer_role === 'admin') {
+    query += ` AND u.role IN ('manager', 'employee')`;
+  }
+
+  query += ` ORDER BY otr.created_at DESC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Approve overtime request
+app.put("/api/overtime-requests/:id/approve", (req, res) => {
+  const requestId = req.params.id;
+  const { reviewer_id } = req.body;
+
+  db.get(
+    `SELECT otr.*, e.id as emp_id, u.id as user_id, u.name as employee_name, u.email as employee_email
+     FROM overtime_requests otr
+     JOIN employees e ON otr.employee_id = e.id
+     JOIN users u ON e.user_id = u.id
+     WHERE otr.id = ?`,
+    [requestId],
+    (err, request) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      if (!request) {
+        return res.status(404).json({ message: "Aanvraag niet gevonden" });
+      }
+
+      db.run(
+        `UPDATE overtime_requests SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [reviewer_id, requestId],
+        function(updateErr) {
+          if (updateErr) {
+            console.error("Error updating request:", updateErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          const year = new Date(request.request_date).getFullYear();
+
+          // Get last balance
+          db.get(
+            `SELECT balance_after FROM overtime_transactions 
+             WHERE employee_id = ? ORDER BY transaction_date DESC, id DESC LIMIT 1`,
+            [request.emp_id],
+            (err, prevTransaction) => {
+              const prevBalance = prevTransaction ? prevTransaction.balance_after : 0;
+              const newBalance = prevBalance + Math.abs(request.hours);
+
+              db.run(
+                `INSERT INTO overtime_transactions (employee_id, year, transaction_date, hours, description, type, balance_after)
+                 VALUES (?, ?, ?, ?, ?, 'added', ?)`,
+                [request.emp_id, year, request.request_date, Math.abs(request.hours), request.description || 'Overuren', newBalance],
+                function(transErr) {
+                  if (transErr) {
+                    console.error("Error creating transaction:", transErr.message);
+                  }
+
+                  recalculateOvertimeBalances(request.emp_id);
+
+                  createNotification(request.user_id, 'overtime_approved', requestId,
+                    `Je overurenaanvraag voor ${request.request_date} (${request.hours} uur) is goedgekeurd`);
+
+                  const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                      <h2 style="color: #4CAF50;">✓ Overuren Goedgekeurd</h2>
+                      <p>Beste ${request.employee_name},</p>
+                      <p>Je overurenaanvraag is <strong style="color: #4CAF50;">goedgekeurd</strong>!</p>
+                      <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4CAF50;">
+                        <p><strong>Datum:</strong> ${request.request_date}</p>
+                        <p><strong>Aantal uren:</strong> ${request.hours}</p>
+                        ${request.description ? `<p><strong>Beschrijving:</strong> ${request.description}</p>` : ''}
+                      </div>
+                      <p>De uren zijn toegevoegd aan je overurensaldo.</p>
+                      <p style="color: #888; font-size: 12px;">Eemvallei Tandartsen - Personeelsportaal</p>
+                    </div>
+                  `;
+                  sendEmailNotification(request.employee_email, 'Overuren goedgekeurd ✓', emailHtml);
+
+                  res.json({ message: "Aanvraag goedgekeurd" });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Reject overtime request
+app.put("/api/overtime-requests/:id/reject", (req, res) => {
+  const requestId = req.params.id;
+  const { reviewer_id, reason } = req.body;
+
+  db.get(
+    `SELECT otr.*, u.id as user_id, u.name as employee_name, u.email as employee_email
+     FROM overtime_requests otr
+     JOIN employees e ON otr.employee_id = e.id
+     JOIN users u ON e.user_id = u.id
+     WHERE otr.id = ?`,
+    [requestId],
+    (err, request) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      if (!request) {
+        return res.status(404).json({ message: "Aanvraag niet gevonden" });
+      }
+
+      db.run(
+        `UPDATE overtime_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [reviewer_id, requestId],
+        function(updateErr) {
+          if (updateErr) {
+            console.error("Error updating request:", updateErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          const rejectMessage = reason 
+            ? `Je overurenaanvraag voor ${request.request_date} (${request.hours} uur) is afgewezen. Reden: ${reason}`
+            : `Je overurenaanvraag voor ${request.request_date} (${request.hours} uur) is afgewezen`;
+          
+          createNotification(request.user_id, 'overtime_rejected', requestId, rejectMessage);
+
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #f44336;">✗ Overuren Afgewezen</h2>
+              <p>Beste ${request.employee_name},</p>
+              <p>Je overurenaanvraag is helaas <strong style="color: #f44336;">afgewezen</strong>.</p>
+              <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f44336;">
+                <p><strong>Datum:</strong> ${request.request_date}</p>
+                <p><strong>Aantal uren:</strong> ${request.hours}</p>
+                ${request.description ? `<p><strong>Beschrijving:</strong> ${request.description}</p>` : ''}
+                ${reason ? `<p><strong>Reden afwijzing:</strong> ${reason}</p>` : ''}
+              </div>
+              <p>Neem contact op met je leidinggevende voor meer informatie.</p>
+              <p style="color: #888; font-size: 12px;">Eemvallei Tandartsen - Personeelsportaal</p>
+            </div>
+          `;
+          sendEmailNotification(request.employee_email, 'Overuren afgewezen', emailHtml);
+
+          res.json({ message: "Aanvraag afgewezen" });
+        }
+      );
     }
   );
 });

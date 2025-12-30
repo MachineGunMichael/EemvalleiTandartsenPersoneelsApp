@@ -1,6 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 
 const AuthContext = createContext(null);
+
+// Session timeout in milliseconds (1 hour = 60 * 60 * 1000)
+const SESSION_TIMEOUT = 60 * 60 * 1000;
+const ACTIVITY_CHECK_INTERVAL = 60 * 1000; // Check every minute
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -15,12 +19,92 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [serverOnline, setServerOnline] = useState(true);
+  const activityCheckRef = useRef(null);
+
+  // Update last activity timestamp
+  const updateLastActivity = useCallback(() => {
+    if (isAuthenticated) {
+      localStorage.setItem("lastActivity", Date.now().toString());
+    }
+  }, [isAuthenticated]);
+
+  // Check if session has expired
+  const checkSessionExpiry = useCallback(() => {
+    const lastActivity = localStorage.getItem("lastActivity");
+    if (lastActivity) {
+      const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+      if (timeSinceLastActivity >= SESSION_TIMEOUT) {
+        console.log("Session expired due to inactivity");
+        // Clear user state
+        setUser(null);
+        setIsAuthenticated(false);
+        localStorage.removeItem("user");
+        localStorage.removeItem("lastActivity");
+        localStorage.removeItem("selectedEmployeeId");
+      }
+    }
+  }, []);
+
+  // Set up activity tracking
+  useEffect(() => {
+    if (!isAuthenticated) {
+      // Clear timers when not authenticated
+      if (activityCheckRef.current) clearInterval(activityCheckRef.current);
+      return;
+    }
+
+    // Initialize last activity on login
+    updateLastActivity();
+
+    // Activity events to track
+    const activityEvents = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"];
+
+    // Throttled activity handler (update at most once per second)
+    let lastUpdate = 0;
+    const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastUpdate > 1000) {
+        lastUpdate = now;
+        updateLastActivity();
+      }
+    };
+
+    // Add event listeners
+    activityEvents.forEach(event => {
+      window.addEventListener(event, handleActivity, { passive: true });
+    });
+
+    // Set up periodic check for session expiry
+    activityCheckRef.current = setInterval(checkSessionExpiry, ACTIVITY_CHECK_INTERVAL);
+
+    // Cleanup
+    return () => {
+      activityEvents.forEach(event => {
+        window.removeEventListener(event, handleActivity);
+      });
+      if (activityCheckRef.current) clearInterval(activityCheckRef.current);
+    };
+  }, [isAuthenticated, updateLastActivity, checkSessionExpiry]);
 
   // Check if user is already logged in (from localStorage)
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       try {
+        // Check if session has expired before restoring
+        const lastActivity = localStorage.getItem("lastActivity");
+        if (lastActivity) {
+          const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+          if (timeSinceLastActivity >= SESSION_TIMEOUT) {
+            // Session expired, clear storage
+            localStorage.removeItem("user");
+            localStorage.removeItem("lastActivity");
+            localStorage.removeItem("selectedEmployeeId");
+            setIsLoading(false);
+            return;
+          }
+        }
+        
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         setIsAuthenticated(true);
@@ -51,6 +135,7 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       setServerOnline(true);
       localStorage.setItem("user", JSON.stringify(userData));
+      localStorage.setItem("lastActivity", Date.now().toString());
       return { success: true };
     } catch (error) {
       if (error.message === "Failed to fetch") {
@@ -62,11 +147,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem("user");
-  };
+    localStorage.removeItem("lastActivity");
+    localStorage.removeItem("selectedEmployeeId");
+  }, []);
 
   const checkServerStatus = useCallback(async () => {
     try {

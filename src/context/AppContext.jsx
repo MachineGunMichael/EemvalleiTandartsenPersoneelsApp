@@ -23,11 +23,13 @@ export const roleRoutes = {
     { path: "/", name: "Dashboard", icon: "dashboard" },
     { path: "/medewerkers", name: "Medewerkers", icon: "people" },
     { path: "/vakantie", name: "Vakantie", icon: "vacation" },
+    { path: "/overuren", name: "Overuren", icon: "overtime" },
     { path: "/documenten", name: "Documenten", icon: "folder" },
   ],
   employee: [
     { path: "/", name: "Dashboard", icon: "dashboard" },
     { path: "/vakantie", name: "Vakantie", icon: "vacation" },
+    { path: "/overuren", name: "Overuren", icon: "overtime" },
     { path: "/documenten", name: "Documenten", icon: "folder" },
   ],
 };

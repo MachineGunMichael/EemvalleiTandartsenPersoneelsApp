@@ -456,8 +456,18 @@ const Vakantie = () => {
         </Box>
       </Box>
 
-      {/* Reusable Holiday Overview Table */}
-      <HolidayOverviewTable holidayData={holidayData} />
+      {/* Reusable Holiday Overview Table - wrapped in container box like form */}
+      <Box
+        sx={{
+          backgroundColor: tableColors.container.background,
+          p: 4,
+          borderRadius: "12px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+          mb: 4,
+        }}
+      >
+        <HolidayOverviewTable holidayData={holidayData} />
+      </Box>
 
       {/* Reusable Holiday Chart */}
       <HolidayChart holidayTransactions={holidayTransactions} />

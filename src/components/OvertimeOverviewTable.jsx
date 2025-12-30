@@ -12,12 +12,12 @@ import {
 } from "@mui/material";
 import { tokens } from "../theme";
 
-const HolidayOverviewTable = ({ holidayData, title = "Vakantie-uren Overzicht", titleVariant = "h4", showMarginBottom = false }) => {
+const OvertimeOverviewTable = ({ overtimeData, title = "Overuren Overzicht", titleVariant = "h4", showMarginBottom = false }) => {
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
   const isDarkMode = theme.palette.mode === "dark";
 
-  // Table color configuration
+  // Table color configuration - identical to HolidayOverviewTable
   const tableColors = {
     header: {
       background: isDarkMode ? colors.taupeAccent[600] : colors.taupeAccent[200],
@@ -66,42 +66,45 @@ const HolidayOverviewTable = ({ holidayData, title = "Vakantie-uren Overzicht", 
               }}
             >
               <TableCell>Jaar</TableCell>
+              <TableCell>Opgebouwd</TableCell>
+              <TableCell>Omgezet</TableCell>
+              <TableCell>Uitbetaald</TableCell>
               <TableCell>Beschikbaar</TableCell>
-              <TableCell>Gebruikt</TableCell>
-              <TableCell>Resterend</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {holidayData.map((holiday, idx) => (
-              <TableRow
-                key={holiday.id || holiday.year || idx}
-                sx={{
-                  "&:nth-of-type(odd)": { backgroundColor: tableColors.cells.backgroundOdd },
-                  "&:nth-of-type(even)": { backgroundColor: tableColors.cells.backgroundEven },
-                  "&:hover": { backgroundColor: tableColors.cells.backgroundHover },
-                  "& td": {
-                    borderBottom: `1px solid ${colors.primary[200]}`,
-                    py: 2,
-                    color: tableColors.cells.text,
-                  },
-                  "& td:first-of-type": { pl: 3 },
-                  "&:last-of-type td": { borderBottom: "none" },
-                }}
-              >
-                <TableCell>{holiday.year}</TableCell>
-                <TableCell>{holiday.available_hours} uur</TableCell>
-                <TableCell>{holiday.used_hours} uur</TableCell>
-                <TableCell>
-                  <Typography fontWeight="600" component="span">
-                    {(holiday.available_hours - holiday.used_hours).toFixed(1)} uur
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ))}
-            {holidayData.length === 0 && (
+            {overtimeData && overtimeData.length > 0 ? (
+              overtimeData.map((row, idx) => (
+                <TableRow
+                  key={row.id || row.year || idx}
+                  sx={{
+                    "&:nth-of-type(odd)": { backgroundColor: tableColors.cells.backgroundOdd },
+                    "&:nth-of-type(even)": { backgroundColor: tableColors.cells.backgroundEven },
+                    "&:hover": { backgroundColor: tableColors.cells.backgroundHover },
+                    "& td": {
+                      borderBottom: `1px solid ${colors.primary[200]}`,
+                      py: 2,
+                      color: tableColors.cells.text,
+                    },
+                    "& td:first-of-type": { pl: 3 },
+                    "&:last-of-type td": { borderBottom: "none" },
+                  }}
+                >
+                  <TableCell>{row.year}</TableCell>
+                  <TableCell>{row.total_hours || 0} uur</TableCell>
+                  <TableCell>{row.converted_hours || 0} uur</TableCell>
+                  <TableCell>{row.paid_hours || 0} uur</TableCell>
+                  <TableCell>
+                    <Typography fontWeight="600" component="span">
+                      {((row.total_hours || 0) - (row.converted_hours || 0) - (row.paid_hours || 0)).toFixed(1)} uur
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
               <TableRow>
-                <TableCell colSpan={4} sx={{ textAlign: "center", py: 4 }}>
-                  Geen vakantie-uren gegevens gevonden
+                <TableCell colSpan={5} sx={{ textAlign: "center", py: 4 }}>
+                  Geen overuren geregistreerd
                 </TableCell>
               </TableRow>
             )}
@@ -112,4 +115,4 @@ const HolidayOverviewTable = ({ holidayData, title = "Vakantie-uren Overzicht", 
   );
 };
 
-export default HolidayOverviewTable;
+export default OvertimeOverviewTable;

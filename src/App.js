@@ -8,6 +8,7 @@ import Topbar from "./scenes/global/Topbar";
 import Sidebar from "./scenes/global/Sidebar";
 import Dashboard from "./scenes/dashboard";
 import Vakantie from "./scenes/vakantie";
+import Overuren from "./scenes/overuren";
 import Medewerkers from "./scenes/medewerkers";
 import Instellingen from "./scenes/instellingen";
 import Documenten from "./scenes/documenten";
@@ -72,6 +73,9 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             {(currentRole === "manager" || currentRole === "employee") && (
               <Route path="/vakantie" element={<Vakantie />} />
+            )}
+            {(currentRole === "manager" || currentRole === "employee") && (
+              <Route path="/overuren" element={<Overuren />} />
             )}
             {(currentRole === "admin" || currentRole === "manager") && (
               <Route path="/medewerkers" element={<Medewerkers />} />

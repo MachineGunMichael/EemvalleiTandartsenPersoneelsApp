@@ -36,6 +36,8 @@ import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import HolidayOverviewTable from "../../components/HolidayOverviewTable";
 import HolidayChart from "../../components/HolidayChart";
+import OvertimeOverviewTable from "../../components/OvertimeOverviewTable";
+import OvertimeChart from "../../components/OvertimeChart";
 
 const Medewerkers = () => {
   const theme = useTheme();
@@ -49,6 +51,8 @@ const Medewerkers = () => {
   const [contractHistory, setContractHistory] = useState([]);
   const [holidayData, setHolidayData] = useState([]);
   const [holidayTransactions, setHolidayTransactions] = useState([]);
+  const [overtimeData, setOvertimeData] = useState([]);
+  const [overtimeTransactions, setOvertimeTransactions] = useState([]);
   const [formSuccess, setFormSuccess] = useState("");
   const [formError, setFormError] = useState("");
 
@@ -89,6 +93,22 @@ const Medewerkers = () => {
 
   // Delete transaction dialog state
   const [deleteTransactionDialog, setDeleteTransactionDialog] = useState({ open: false, transaction: null });
+
+  // Delete overtime transaction dialog state
+  const [deleteOvertimeTransactionDialog, setDeleteOvertimeTransactionDialog] = useState({ open: false, transaction: null });
+
+  // Convert/Payout overtime form state
+  const [overtimeActionForm, setOvertimeActionForm] = useState({
+    hours: "",
+    action: "convert", // "convert" or "payout"
+    description: "",
+  });
+
+  // Calculate available overtime hours
+  const availableOvertime = overtimeData.reduce(
+    (total, row) => total + (row.total_hours || 0) - (row.converted_hours || 0) - (row.paid_hours || 0),
+    0
+  );
 
   // ============================================
   // TABLE COLOR CONFIGURATION
@@ -164,7 +184,17 @@ const Medewerkers = () => {
         if (!response.ok) throw new Error("Kon medewerkers niet ophalen");
         const data = await response.json();
         setEmployees(data || []);
-        // No default selection - user must select an employee
+        
+        // Restore previously selected employee from localStorage
+        const savedEmployeeId = localStorage.getItem("selectedEmployeeId");
+        if (savedEmployeeId && data) {
+          const savedEmployee = data.find(
+            (emp) => emp.employee_id === parseInt(savedEmployeeId)
+          );
+          if (savedEmployee) {
+            setSelectedEmployee(savedEmployee);
+          }
+        }
       } catch (err) {
         console.error("Error fetching employees:", err);
       } finally {
@@ -174,12 +204,21 @@ const Medewerkers = () => {
     fetchEmployees();
   }, []);
 
+  // Save selected employee to localStorage when it changes
+  useEffect(() => {
+    if (selectedEmployee) {
+      localStorage.setItem("selectedEmployeeId", selectedEmployee.employee_id.toString());
+    }
+  }, [selectedEmployee]);
+
   // Fetch employee data when selection changes
   useEffect(() => {
     if (!selectedEmployee) {
       setContractHistory([]);
       setHolidayData([]);
       setHolidayTransactions([]);
+      setOvertimeData([]);
+      setOvertimeTransactions([]);
       return;
     }
 
@@ -233,6 +272,24 @@ const Medewerkers = () => {
         if (transRes.ok) {
           const transactions = await transRes.json();
           setHolidayTransactions(transactions);
+        }
+
+        // Fetch overtime data
+        const overtimeRes = await fetch(
+          `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime`
+        );
+        if (overtimeRes.ok) {
+          const overtime = await overtimeRes.json();
+          setOvertimeData(overtime);
+        }
+
+        // Fetch overtime transactions
+        const overtimeTransRes = await fetch(
+          `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-transactions`
+        );
+        if (overtimeTransRes.ok) {
+          const otTransactions = await overtimeTransRes.json();
+          setOvertimeTransactions(otTransactions);
         }
       } catch (err) {
         console.error("Error fetching employee data:", err);
@@ -441,6 +498,99 @@ const Medewerkers = () => {
       setFormError(err.message);
     } finally {
       setDeleteTransactionDialog({ open: false, transaction: null });
+    }
+  };
+
+  // Handle overtime action (convert or payout)
+  const handleOvertimeAction = async (e) => {
+    e.preventDefault();
+    setFormError("");
+    setFormSuccess("");
+
+    const hoursToProcess = parseFloat(overtimeActionForm.hours);
+    if (!hoursToProcess || hoursToProcess <= 0) {
+      setFormError("Voer een geldig aantal uren in");
+      return;
+    }
+    if (hoursToProcess > availableOvertime) {
+      setFormError(`Onvoldoende overuren beschikbaar. Maximaal: ${availableOvertime} uur`);
+      return;
+    }
+
+    try {
+      const endpoint = overtimeActionForm.action === "convert" 
+        ? `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-to-vacation`
+        : `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-payout`;
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hours: hoursToProcess,
+          description: overtimeActionForm.description || (overtimeActionForm.action === "convert" ? "Omgezet naar vakantie" : "Uitbetaald"),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Fout bij verwerken overuren");
+      }
+
+      setFormSuccess(
+        overtimeActionForm.action === "convert"
+          ? `${hoursToProcess} overuren omgezet naar vakantie-uren`
+          : `${hoursToProcess} overuren uitbetaald`
+      );
+      setOvertimeActionForm({ hours: "", action: "convert", description: "" });
+
+      // Refresh all data
+      const [overtimeRes, overtimeTransRes, holidayRes, transRes] = await Promise.all([
+        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime`),
+        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-transactions`),
+        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holidays`),
+        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holiday-transactions`),
+      ]);
+
+      if (overtimeRes.ok) setOvertimeData(await overtimeRes.json());
+      if (overtimeTransRes.ok) setOvertimeTransactions(await overtimeTransRes.json());
+      if (holidayRes.ok) setHolidayData(await holidayRes.json());
+      if (transRes.ok) setHolidayTransactions(await transRes.json());
+    } catch (err) {
+      setFormError(err.message);
+    }
+  };
+
+  // Handle delete overtime transaction
+  const handleDeleteOvertimeTransaction = async () => {
+    if (!deleteOvertimeTransactionDialog.transaction) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:5001/api/overtime-transactions/${deleteOvertimeTransactionDialog.transaction.id}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Fout bij verwijderen transactie");
+      }
+
+      setFormSuccess("Overuren transactie verwijderd");
+      
+      // Refresh overtime data
+      const overtimeRes = await fetch(
+        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime`
+      );
+      if (overtimeRes.ok) setOvertimeData(await overtimeRes.json());
+
+      const overtimeTransRes = await fetch(
+        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-transactions`
+      );
+      if (overtimeTransRes.ok) setOvertimeTransactions(await overtimeTransRes.json());
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setDeleteOvertimeTransactionDialog({ open: false, transaction: null });
     }
   };
 
@@ -923,8 +1073,224 @@ const Medewerkers = () => {
 
           <Divider sx={{ my: 4 }} />
 
-          {/* Section 3: Holiday Hours - Using shared component */}
-          <HolidayOverviewTable holidayData={holidayData} />
+          {/* Section 3: Overtime - Overview Table */}
+          <OvertimeOverviewTable overtimeData={overtimeData} titleVariant="h4" showMarginBottom={true} />
+
+          {/* Overtime Action Form - Convert or Payout */}
+          <Box
+            sx={{
+              backgroundColor: tableColors.container.background,
+              p: 3,
+              borderRadius: "12px",
+              boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+              mb: 4,
+            }}
+          >
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+              <Typography variant="h5" fontWeight="600" color={tableColors.cells.text}>
+                Overuren Verwerken
+              </Typography>
+              <Box
+                sx={{
+                  backgroundColor: isDarkMode ? colors.taupeAccent[600] : colors.taupeAccent[200],
+                  px: 2,
+                  py: 0.75,
+                  borderRadius: "8px",
+                }}
+              >
+                <Typography variant="body2" fontWeight="600" color={colors.primary[900]}>
+                  Beschikbaar: {availableOvertime} uur
+                </Typography>
+              </Box>
+            </Box>
+            <Box component="form" onSubmit={handleOvertimeAction} display="flex" gap={2} alignItems="center">
+              <FormControl sx={{ ...inputStyles, minWidth: 180 }}>
+                <InputLabel>Actie</InputLabel>
+                <Select
+                  value={overtimeActionForm.action}
+                  onChange={(e) => setOvertimeActionForm({ ...overtimeActionForm, action: e.target.value })}
+                  label="Actie"
+                >
+                  <MenuItem value="convert">Omzetten naar vakantie</MenuItem>
+                  <MenuItem value="payout">Uitbetalen</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Uren"
+                type="number"
+                value={overtimeActionForm.hours}
+                onChange={(e) => setOvertimeActionForm({ ...overtimeActionForm, hours: e.target.value })}
+                required
+                inputProps={{ step: "0.5", min: "0.5", max: availableOvertime }}
+                sx={{ ...inputStyles, width: 120 }}
+              />
+              <TextField
+                label="Beschrijving (optioneel)"
+                value={overtimeActionForm.description}
+                onChange={(e) => setOvertimeActionForm({ ...overtimeActionForm, description: e.target.value })}
+                sx={{ ...inputStyles, flex: 1 }}
+              />
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={availableOvertime <= 0}
+                sx={{
+                  backgroundColor: colors.taupeAccent[500],
+                  color: "white",
+                  px: 3,
+                  py: 1.5,
+                  height: 40,
+                  "&:hover": { backgroundColor: colors.taupeAccent[600] },
+                  "&:disabled": { backgroundColor: colors.grey[400] },
+                }}
+              >
+                {overtimeActionForm.action === "convert" ? "Omzetten" : "Uitbetalen"}
+              </Button>
+            </Box>
+          </Box>
+
+          {/* Overtime Chart */}
+          <OvertimeChart overtimeTransactions={overtimeTransactions} titleVariant="h5" containerPadding={3} />
+
+          {/* Overtime Transaction History */}
+          {overtimeTransactions.length > 0 && (
+            <Box
+              sx={{
+                backgroundColor: tableColors.container.background,
+                p: 3,
+                borderRadius: "12px",
+                boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+                mb: 4,
+              }}
+            >
+              <Typography variant="h5" fontWeight="600" color={tableColors.cells.text} mb={2}>
+                Overuren Transactie Geschiedenis
+              </Typography>
+              <TableContainer
+                sx={{
+                  borderRadius: "12px",
+                  border: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
+                  overflow: "hidden",
+                }}
+              >
+                <Table size="small">
+                  <TableHead>
+                    <TableRow
+                      sx={{
+                        backgroundColor: tableColors.header.background,
+                        "& th": {
+                          fontWeight: "bold",
+                          color: tableColors.header.text,
+                          fontSize: "13px",
+                          borderBottom: `2px solid ${colors.taupeAccent[300]}`,
+                          py: 1.5,
+                        },
+                      }}
+                    >
+                      <TableCell>Datum</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Uren</TableCell>
+                      <TableCell>Beschrijving</TableCell>
+                      <TableCell>Saldo na</TableCell>
+                      <TableCell sx={{ width: 50 }}></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {[...overtimeTransactions]
+                      .sort((a, b) => {
+                        const dateCompare = new Date(b.transaction_date) - new Date(a.transaction_date);
+                        if (dateCompare !== 0) return dateCompare;
+                        return b.id - a.id;
+                      })
+                      .map((t) => (
+                        <TableRow
+                          key={t.id}
+                          sx={{
+                            "&:nth-of-type(odd)": { backgroundColor: tableColors.cells.backgroundOdd },
+                            "&:nth-of-type(even)": { backgroundColor: tableColors.cells.backgroundEven },
+                            "&:hover": { backgroundColor: tableColors.cells.backgroundHover },
+                            "& td": {
+                              borderBottom: `1px solid ${colors.primary[200]}`,
+                              py: 1,
+                              color: tableColors.cells.text,
+                              fontSize: "13px",
+                            },
+                          }}
+                        >
+                          <TableCell>
+                            {new Date(t.transaction_date).toLocaleDateString("nl-NL", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </TableCell>
+                          <TableCell>
+                            <Box
+                              sx={{
+                                display: "inline-block",
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: "4px",
+                                backgroundColor: t.type === "added" 
+                                  ? (isDarkMode ? colors.greenAccent[500] : colors.greenAccent[100])
+                                  : t.type === "converted"
+                                  ? (isDarkMode ? colors.redAccent[500] : colors.redAccent[100])
+                                  : (isDarkMode ? colors.redAccent[500] : colors.redAccent[100]),
+                                color: t.type === "added"
+                                  ? (isDarkMode ? colors.primary[800] : colors.greenAccent[700])
+                                  : t.type === "converted"
+                                  ? (isDarkMode ? colors.primary[800] : colors.redAccent[700])
+                                  : (isDarkMode ? colors.primary[800] : colors.redAccent[700]),
+                                fontSize: "11px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {t.type === "added" ? "Toegevoegd" : t.type === "converted" ? "Omgezet" : "Uitbetaald"}
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Typography
+                              component="span"
+                              sx={{
+                                fontWeight: 600,
+                                color: t.type === "added"
+                                  ? colors.greenAccent[500] 
+                                  : colors.redAccent[500],
+                              }}
+                            >
+                              {t.type === "added" ? `+${t.hours}` : `-${t.hours}`}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{t.description || "-"}</TableCell>
+                          <TableCell>{t.balance_after} uur</TableCell>
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => setDeleteOvertimeTransactionDialog({ open: true, transaction: t })}
+                              sx={{
+                                color: colors.redAccent[400],
+                                "&:hover": {
+                                  backgroundColor: colors.redAccent[100],
+                                  color: colors.redAccent[600],
+                                },
+                              }}
+                              title="Transactie verwijderen"
+                            >
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+
+          <Divider sx={{ my: 4 }} />
+
+          {/* Section 4: Holiday Hours - Using shared component */}
+          <HolidayOverviewTable holidayData={holidayData} titleVariant="h4" showMarginBottom={true} />
 
           {/* Add Hours Form */}
           <Box
@@ -1033,7 +1399,7 @@ const Medewerkers = () => {
           </Box>
 
           {/* Line Chart - Using shared component */}
-          <HolidayChart holidayTransactions={holidayTransactions} />
+          <HolidayChart holidayTransactions={holidayTransactions} titleVariant="h5" containerPadding={3} />
 
           {/* Transaction History */}
           {holidayTransactions.length > 0 && (
@@ -1047,9 +1413,15 @@ const Medewerkers = () => {
               }}
             >
               <Typography variant="h5" fontWeight="600" color={tableColors.cells.text} mb={2}>
-                Transactie Geschiedenis
+                Vakantie Transactie Geschiedenis
               </Typography>
-              <TableContainer>
+              <TableContainer
+                sx={{
+                  borderRadius: "12px",
+                  border: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
+                  overflow: "hidden",
+                }}
+              >
                 <Table size="small">
                   <TableHead>
                     <TableRow
@@ -1213,7 +1585,7 @@ const Medewerkers = () => {
         onClose={() => setDeleteTransactionDialog({ open: false, transaction: null })}
       >
         <DialogTitle sx={{ fontWeight: "bold", color: colors.redAccent[500] }}>
-          Transactie verwijderen
+          Vakantie Transactie verwijderen
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
@@ -1251,6 +1623,64 @@ const Medewerkers = () => {
           </Button>
           <Button
             onClick={handleDeleteTransaction}
+            sx={{
+              color: colors.redAccent[500],
+              "&:hover": { backgroundColor: colors.redAccent[100] },
+            }}
+          >
+            Verwijderen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Overtime Transaction Confirmation Dialog */}
+      <Dialog
+        open={deleteOvertimeTransactionDialog.open}
+        onClose={() => setDeleteOvertimeTransactionDialog({ open: false, transaction: null })}
+      >
+        <DialogTitle sx={{ fontWeight: "bold", color: colors.redAccent[500] }}>
+          Overuren Transactie verwijderen
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Weet u zeker dat u deze overuren transactie wilt verwijderen?
+            {deleteOvertimeTransactionDialog.transaction && (
+              <>
+                <br /><br />
+                <strong>Datum:</strong>{" "}
+                {new Date(deleteOvertimeTransactionDialog.transaction.transaction_date).toLocaleDateString("nl-NL")}
+                <br />
+                <strong>Type:</strong>{" "}
+                {deleteOvertimeTransactionDialog.transaction.type === "added" 
+                  ? "Toegevoegd" 
+                  : deleteOvertimeTransactionDialog.transaction.type === "converted" 
+                  ? "Omgezet" 
+                  : "Uitbetaald"}
+                <br />
+                <strong>Uren:</strong>{" "}
+                {deleteOvertimeTransactionDialog.transaction.type === "added" ? "+" : "-"}
+                {deleteOvertimeTransactionDialog.transaction.hours}
+                <br />
+                <strong>Beschrijving:</strong>{" "}
+                {deleteOvertimeTransactionDialog.transaction.description || "-"}
+              </>
+            )}
+            <br /><br />
+            <strong>Let op:</strong> Alle saldo's na deze transactie worden automatisch herberekend.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteOvertimeTransactionDialog({ open: false, transaction: null })}
+            sx={{
+              color: colors.grey[600],
+              "&:hover": { backgroundColor: colors.grey[200] },
+            }}
+          >
+            Annuleren
+          </Button>
+          <Button
+            onClick={handleDeleteOvertimeTransaction}
             sx={{
               color: colors.redAccent[500],
               "&:hover": { backgroundColor: colors.redAccent[100] },

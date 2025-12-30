@@ -433,6 +433,7 @@ const Dashboard = () => {
                 <TableCell>Bonus</TableCell>
                 <TableCell>Vakantie beschikbaar</TableCell>
                 <TableCell>Vakantie gebruikt</TableCell>
+                <TableCell>Overuren</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -589,6 +590,26 @@ const Dashboard = () => {
                         {employee.used_hours !== null 
                           ? `${employee.used_hours} uur` 
                           : "-"}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        backgroundColor: (employee.overtime_balance || 0) > 0 
+                          ? colors.taupeAccent[300] 
+                          : colors.primary[300],
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <Typography fontWeight="500" color={colors.primary[900]}>
+                        {employee.overtime_balance !== null && employee.overtime_balance !== undefined
+                          ? `${employee.overtime_balance} uur` 
+                          : "0 uur"}
                       </Typography>
                     </Box>
                   </TableCell>

@@ -26,6 +26,7 @@ import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import BeachAccessOutlinedIcon from "@mui/icons-material/BeachAccessOutlined";
+import MoreTimeOutlinedIcon from "@mui/icons-material/MoreTimeOutlined";
 
 const Topbar = () => {
   const theme = useTheme();
@@ -38,11 +39,13 @@ const Topbar = () => {
   const [notificationAnchor, setNotificationAnchor] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [pendingOvertimeRequests, setPendingOvertimeRequests] = useState([]);
   const [notificationCount, setNotificationCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [selectedRequestType, setSelectedRequestType] = useState("vacation"); // "vacation" or "overtime"
 
   // Fetch notifications and pending requests
   const fetchNotifications = async () => {
@@ -56,12 +59,21 @@ const Topbar = () => {
         setNotifications(notifs);
       }
 
-      // If user is manager or admin, also fetch pending vacation requests
+      // If user is manager or admin, also fetch pending vacation and overtime requests
       if (user.role === "manager" || user.role === "admin") {
-        const reqRes = await fetch(`http://localhost:5001/api/vacation-requests?status=pending&reviewer_role=${user.role}`);
-        if (reqRes.ok) {
-          const reqs = await reqRes.json();
+        const [vacReqRes, otReqRes] = await Promise.all([
+          fetch(`http://localhost:5001/api/vacation-requests?status=pending&reviewer_role=${user.role}`),
+          fetch(`http://localhost:5001/api/overtime-requests?status=pending&reviewer_role=${user.role}`),
+        ]);
+        
+        if (vacReqRes.ok) {
+          const reqs = await vacReqRes.json();
           setPendingRequests(reqs);
+        }
+        
+        if (otReqRes.ok) {
+          const otReqs = await otReqRes.json();
+          setPendingOvertimeRequests(otReqs);
         }
       }
     } catch (err) {
@@ -71,9 +83,9 @@ const Topbar = () => {
 
   // Calculate notification count
   useEffect(() => {
-    const count = notifications.length + pendingRequests.length;
+    const count = notifications.length + pendingRequests.length + pendingOvertimeRequests.length;
     setNotificationCount(count);
-  }, [notifications, pendingRequests]);
+  }, [notifications, pendingRequests, pendingOvertimeRequests]);
 
   // Fetch on mount and set up polling
   useEffect(() => {
@@ -111,9 +123,29 @@ const Topbar = () => {
     }
   };
 
+  // Approve overtime request
+  const handleApproveOvertime = async (requestId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:5001/api/overtime-requests/${requestId}/approve`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewer_id: user.id }),
+      });
+      if (response.ok) {
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error("Error approving overtime request:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Open reject dialog
-  const handleRejectClick = (request) => {
+  const handleRejectClick = (request, type = "vacation") => {
     setSelectedRequest(request);
+    setSelectedRequestType(type);
     setRejectReason("");
     setRejectDialogOpen(true);
   };
@@ -123,7 +155,11 @@ const Topbar = () => {
     if (!selectedRequest) return;
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/vacation-requests/${selectedRequest.id}/reject`, {
+      const endpoint = selectedRequestType === "overtime" 
+        ? `http://localhost:5001/api/overtime-requests/${selectedRequest.id}/reject`
+        : `http://localhost:5001/api/vacation-requests/${selectedRequest.id}/reject`;
+      
+      const response = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewer_id: user.id, reason: rejectReason }),
@@ -256,11 +292,11 @@ const Topbar = () => {
           {pendingRequests.length > 0 && (
             <>
               <Typography variant="subtitle2" color={colors.taupeAccent[600]} mb={1}>
-                Openstaande aanvragen
+                Vakantie Aanvragen
               </Typography>
               {pendingRequests.map((req) => (
                 <Box
-                  key={req.id}
+                  key={`vac-${req.id}`}
                   sx={{
                     p: 2,
                     mb: 1,
@@ -301,7 +337,77 @@ const Topbar = () => {
                       size="small"
                       variant="outlined"
                       startIcon={<CancelOutlinedIcon />}
-                      onClick={() => handleRejectClick(req)}
+                      onClick={() => handleRejectClick(req, "vacation")}
+                      disabled={loading}
+                      sx={{
+                        borderColor: colors.redAccent[400],
+                        color: colors.redAccent[500],
+                        textTransform: "none",
+                        "&:hover": { 
+                          borderColor: colors.redAccent[500],
+                          backgroundColor: colors.redAccent[100],
+                        },
+                      }}
+                    >
+                      Afwijzen
+                    </Button>
+                  </Box>
+                </Box>
+              ))}
+              <Divider sx={{ my: 2 }} />
+            </>
+          )}
+
+          {/* Pending Overtime Requests (for managers/admins) */}
+          {pendingOvertimeRequests.length > 0 && (
+            <>
+              <Typography variant="subtitle2" color={colors.taupeAccent[600]} mb={1}>
+                Overuren Aanvragen
+              </Typography>
+              {pendingOvertimeRequests.map((req) => (
+                <Box
+                  key={`ot-${req.id}`}
+                  sx={{
+                    p: 2,
+                    mb: 1,
+                    borderRadius: "8px",
+                    backgroundColor: isDarkMode ? colors.primary[400] : "#fff",
+                    border: `1px solid ${colors.taupeAccent[200]}`,
+                  }}
+                >
+                  <Box display="flex" alignItems="center" gap={1} mb={1}>
+                    <MoreTimeOutlinedIcon sx={{ color: colors.taupeAccent[500], fontSize: 20 }} />
+                    <Typography variant="body2" fontWeight="600" color={colors.primary[800]}>
+                      Overuren aanvraag
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" color={colors.primary[700]} mb={1}>
+                    <strong>{req.employee_name}</strong> vraagt {Math.abs(req.hours)} overuren aan
+                  </Typography>
+                  <Typography variant="caption" color={colors.primary[600]}>
+                    Datum: {formatDate(req.request_date)} • {req.description}
+                  </Typography>
+                  <Box display="flex" gap={1} mt={2}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<CheckCircleOutlinedIcon />}
+                      onClick={() => handleApproveOvertime(req.id)}
+                      disabled={loading}
+                      sx={{
+                        backgroundColor: colors.greenAccent[500],
+                        color: "#fff",
+                        textTransform: "none",
+                        "&:hover": { backgroundColor: colors.greenAccent[600] },
+                      }}
+                    >
+                      Goedkeuren
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<CancelOutlinedIcon />}
+                      onClick={() => handleRejectClick(req, "overtime")}
                       disabled={loading}
                       sx={{
                         borderColor: colors.redAccent[400],
@@ -337,9 +443,9 @@ const Topbar = () => {
                     borderRadius: "8px",
                     backgroundColor: isDarkMode ? colors.primary[400] : "#fff",
                     border: `1px solid ${
-                      notif.type === "vacation_approved" 
+                      notif.type.includes("approved") 
                         ? colors.greenAccent[300] 
-                        : notif.type === "vacation_rejected"
+                        : notif.type.includes("rejected")
                         ? colors.redAccent[300]
                         : colors.taupeAccent[200]
                     }`,
@@ -351,29 +457,35 @@ const Topbar = () => {
                   onClick={() => handleMarkAsRead(notif.id)}
                 >
                   <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-                    {notif.type === "vacation_approved" && (
+                    {notif.type.includes("approved") && (
                       <CheckCircleOutlinedIcon sx={{ color: colors.greenAccent[500], fontSize: 18 }} />
                     )}
-                    {notif.type === "vacation_rejected" && (
+                    {notif.type.includes("rejected") && (
                       <CancelOutlinedIcon sx={{ color: colors.redAccent[500], fontSize: 18 }} />
                     )}
                     {notif.type === "vacation_request" && (
                       <BeachAccessOutlinedIcon sx={{ color: colors.taupeAccent[500], fontSize: 18 }} />
                     )}
+                    {notif.type === "overtime_request" && (
+                      <MoreTimeOutlinedIcon sx={{ color: colors.taupeAccent[500], fontSize: 18 }} />
+                    )}
                     <Typography 
                       variant="body2" 
                       fontWeight="500"
                       color={
-                        notif.type === "vacation_approved" 
+                        notif.type.includes("approved") 
                           ? colors.greenAccent[600]
-                          : notif.type === "vacation_rejected"
+                          : notif.type.includes("rejected")
                           ? colors.redAccent[600]
                           : colors.primary[800]
                       }
                     >
                       {notif.type === "vacation_approved" && "Vakantie goedgekeurd"}
                       {notif.type === "vacation_rejected" && "Vakantie afgewezen"}
-                      {notif.type === "vacation_request" && "Nieuwe aanvraag"}
+                      {notif.type === "vacation_request" && "Vakantie aanvraag"}
+                      {notif.type === "overtime_approved" && "Overuren goedgekeurd"}
+                      {notif.type === "overtime_rejected" && "Overuren afgewezen"}
+                      {notif.type === "overtime_request" && "Overuren aanvraag"}
                     </Typography>
                   </Box>
                   <Typography variant="body2" color={colors.primary[700]}>
@@ -385,7 +497,7 @@ const Topbar = () => {
                 </Box>
               ))}
             </>
-          ) : pendingRequests.length === 0 ? (
+          ) : pendingRequests.length === 0 && pendingOvertimeRequests.length === 0 ? (
             <Box py={3} textAlign="center">
               <Typography color={colors.primary[600]}>
                 Geen nieuwe meldingen
