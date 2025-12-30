@@ -57,6 +57,7 @@ const Medewerkers = () => {
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
     dienstverband: "tijdelijk",
+    positie: "assistent",
     hourly_rate: "",
     vakantietoeslag_percentage: "8",
     bonus_percentage: "0",
@@ -163,15 +164,7 @@ const Medewerkers = () => {
         if (!response.ok) throw new Error("Kon medewerkers niet ophalen");
         const data = await response.json();
         setEmployees(data || []);
-        
-        // Restore selected employee from localStorage
-        const savedEmployeeId = localStorage.getItem("selectedEmployeeId");
-        if (savedEmployeeId && data) {
-          const savedEmployee = data.find((e) => e.employee_id === parseInt(savedEmployeeId));
-          if (savedEmployee) {
-            setSelectedEmployee(savedEmployee);
-          }
-        }
+        // No default selection - user must select an employee
       } catch (err) {
         console.error("Error fetching employees:", err);
       } finally {
@@ -206,6 +199,7 @@ const Medewerkers = () => {
               year: new Date().getFullYear(),
               month: new Date().getMonth() + 1,
               dienstverband: current.dienstverband,
+              positie: current.positie || "assistent",
               hourly_rate: current.hourly_rate.toString(),
               vakantietoeslag_percentage: current.vakantietoeslag_percentage.toString(),
               bonus_percentage: current.bonus_percentage.toString(),
@@ -253,12 +247,6 @@ const Medewerkers = () => {
     const empId = e.target.value;
     const emp = employees.find((e) => e.employee_id === empId);
     setSelectedEmployee(emp || null);
-    // Save to localStorage
-    if (emp) {
-      localStorage.setItem("selectedEmployeeId", emp.employee_id.toString());
-    } else {
-      localStorage.removeItem("selectedEmployeeId");
-    }
   };
 
   // Handle contract form submit
@@ -283,6 +271,7 @@ const Medewerkers = () => {
             year: parseInt(contractForm.year),
             month: parseInt(contractForm.month),
             dienstverband: contractForm.dienstverband,
+            positie: contractForm.positie,
             hours_per_week: calculatedHoursPerWeek,
             hourly_rate: parseFloat(contractForm.hourly_rate),
             vakantietoeslag_percentage: parseFloat(contractForm.vakantietoeslag_percentage),
@@ -398,6 +387,7 @@ const Medewerkers = () => {
             year: new Date().getFullYear(),
             month: new Date().getMonth() + 1,
             dienstverband: current.dienstverband,
+            positie: current.positie || "assistent",
             hourly_rate: current.hourly_rate.toString(),
             vakantietoeslag_percentage: current.vakantietoeslag_percentage.toString(),
             bonus_percentage: current.bonus_percentage.toString(),
@@ -499,6 +489,34 @@ const Medewerkers = () => {
         </Select>
       </FormControl>
 
+      {/* Empty State - No Employee Selected */}
+      {!selectedEmployee && (
+        <Box
+          sx={{
+            backgroundColor: tableColors.container.background,
+            p: 6,
+            borderRadius: "12px",
+            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+            textAlign: "center",
+          }}
+        >
+          <Typography 
+            variant="h4" 
+            color={colors.taupeAccent[500]} 
+            fontWeight="500"
+            sx={{ mb: 2 }}
+          >
+            Selecteer een medewerker
+          </Typography>
+          <Typography 
+            variant="body1" 
+            color={colors.grey[500]}
+          >
+            Kies een medewerker uit de lijst hierboven om contracten, werkrooster en vakantie-uren te beheren.
+          </Typography>
+        </Box>
+      )}
+
       {selectedEmployee && (
         <>
           {/* Section 1: Contract Change Form */}
@@ -549,6 +567,22 @@ const Medewerkers = () => {
                     <MenuItem value="proeftijd">Proeftijd</MenuItem>
                     <MenuItem value="tijdelijk">Tijdelijk</MenuItem>
                     <MenuItem value="vast">Vast</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl sx={inputStyles}>
+                  <InputLabel>Positie</InputLabel>
+                  <Select
+                    value={contractForm.positie}
+                    onChange={(e) => setContractForm({ ...contractForm, positie: e.target.value })}
+                    label="Positie"
+                  >
+                    <MenuItem value="eigenaar">Eigenaar</MenuItem>
+                    <MenuItem value="praktijkmanager">Praktijkmanager</MenuItem>
+                    <MenuItem value="tandarts">Tandarts</MenuItem>
+                    <MenuItem value="mondhygienist">Mondhygiënist</MenuItem>
+                    <MenuItem value="preventie-assistent">Preventie-assistent</MenuItem>
+                    <MenuItem value="assistent">Assistent</MenuItem>
+                    <MenuItem value="balie-medewerker">Balie-medewerker</MenuItem>
                   </Select>
                 </FormControl>
                 <TextField
@@ -744,6 +778,7 @@ const Medewerkers = () => {
                 >
                   <TableCell>Periode</TableCell>
                   <TableCell>Dienstverband</TableCell>
+                  <TableCell>Positie</TableCell>
                   <TableCell>Uren/week</TableCell>
                   <TableCell sx={{ px: 1 }}>
                     <Box sx={{ textAlign: "center" }}>
@@ -801,6 +836,9 @@ const Medewerkers = () => {
                       {getMonthName(contract.month)} {contract.year}
                     </TableCell>
                     <TableCell>{capitalize(contract.dienstverband)}</TableCell>
+                    <TableCell>
+                      {contract.positie ? capitalize(contract.positie.replace("-", " ")) : "-"}
+                    </TableCell>
                     <TableCell>{contract.hours_per_week} uur</TableCell>
                     <TableCell sx={{ px: 1 }}>
                       <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
@@ -874,7 +912,7 @@ const Medewerkers = () => {
                 ))}
                 {contractHistory.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} sx={{ textAlign: "center", py: 4 }}>
+                    <TableCell colSpan={9} sx={{ textAlign: "center", py: 4 }}>
                       Geen contract geschiedenis gevonden
                     </TableCell>
                   </TableRow>
@@ -1036,7 +1074,11 @@ const Medewerkers = () => {
                   </TableHead>
                   <TableBody>
                     {[...holidayTransactions]
-                      .sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date))
+                      .sort((a, b) => {
+                        const dateCompare = new Date(b.transaction_date) - new Date(a.transaction_date);
+                        if (dateCompare !== 0) return dateCompare;
+                        return b.id - a.id; // Newer transactions (higher id) first for same date
+                      })
                       .map((t) => (
                         <TableRow
                           key={t.id}
@@ -1084,14 +1126,14 @@ const Medewerkers = () => {
                               component="span"
                               sx={{
                                 fontWeight: 600,
-                                color: (t.type === "added" && t.hours >= 0) || (t.type === "used" && t.hours < 0)
+                                color: t.type === "added" && parseFloat(t.hours) >= 0
                                   ? colors.greenAccent[500] 
                                   : colors.redAccent[500],
                               }}
                             >
                               {t.type === "added" 
-                                ? (t.hours >= 0 ? `+${t.hours}` : t.hours)
-                                : (t.hours >= 0 ? `-${t.hours}` : `+${Math.abs(t.hours)}`)}
+                                ? (parseFloat(t.hours) >= 0 ? `+${t.hours}` : `${t.hours}`) 
+                                : `-${t.hours}`}
                             </Typography>
                           </TableCell>
                           <TableCell>{t.description || "-"}</TableCell>

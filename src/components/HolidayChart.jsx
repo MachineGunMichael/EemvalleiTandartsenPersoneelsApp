@@ -103,9 +103,11 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop" }) 
   const chartData = useMemo(() => {
     if (!holidayTransactions || !holidayTransactions.length) return [];
 
-    const sorted = [...holidayTransactions].sort(
-      (a, b) => new Date(a.transaction_date) - new Date(b.transaction_date)
-    );
+    const sorted = [...holidayTransactions].sort((a, b) => {
+      const dateCompare = new Date(a.transaction_date) - new Date(b.transaction_date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.id - b.id; // Older transactions (lower id) first for same date
+    });
 
     // Find the last balance before the selected year starts
     const yearStart = new Date(`${selectedYear}-01-01`);
@@ -187,6 +189,7 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop" }) 
           borderRadius: "12px",
           boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
           height: 350,
+          mb: 4,
         }}
       >
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
@@ -238,6 +241,7 @@ const HolidayChart = ({ holidayTransactions, title = "Vakantie-uren Verloop" }) 
         borderRadius: "12px",
         boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
         height: 350,
+        mb: 4,
       }}
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>

@@ -177,7 +177,6 @@ const Vakantie = () => {
 
     const dateToSubmit = selectionMode === "single" ? singleDate : startDate;
     const formattedDate = dateToSubmit.toISOString().split("T")[0];
-    const year = dateToSubmit.getFullYear();
 
     let fullDescription = description;
     if (selectionMode === "range") {
@@ -185,15 +184,16 @@ const Vakantie = () => {
     }
 
     try {
+      // Submit vacation REQUEST (pending approval) instead of directly adding hours
       const response = await fetch(
-        `http://localhost:5001/api/employees/${user.employee_id}/holiday-transactions`,
+        `http://localhost:5001/api/vacation-requests`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            year,
-            transaction_date: formattedDate,
-            type: "used",
+            employee_id: user.employee_id,
+            user_id: user.id,
+            request_date: formattedDate,
             hours: hoursToSubmit,
             description: fullDescription,
           }),
@@ -205,17 +205,9 @@ const Vakantie = () => {
         throw new Error(data.message || "Fout bij indienen aanvraag");
       }
 
-      setFormSuccess(`Vakantie aanvraag ingediend: ${hoursToSubmit} uur`);
+      setFormSuccess(`Vakantie aanvraag ingediend: ${hoursToSubmit} uur. Wacht op goedkeuring.`);
       setHours("");
       setDescription("");
-
-      // Refresh data
-      const [holidayRes, transRes] = await Promise.all([
-        fetch(`http://localhost:5001/api/employees/${user.employee_id}/holidays`),
-        fetch(`http://localhost:5001/api/employees/${user.employee_id}/holiday-transactions`),
-      ]);
-      if (holidayRes.ok) setHolidayData(await holidayRes.json());
-      if (transRes.ok) setHolidayTransactions(await transRes.json());
     } catch (err) {
       setFormError(err.message);
     }

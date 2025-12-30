@@ -55,6 +55,7 @@ const Instellingen = () => {
     password: "",
     role: "employee",
     dienstverband: "tijdelijk",
+    positie: "assistent",
     hourly_rate: "",
     vakantietoeslag_percentage: "8",
     bonus_percentage: "0",
@@ -242,8 +243,8 @@ const Instellingen = () => {
       return;
     }
 
-    // For employees, validate contract fields
-    if (formData.role === "employee") {
+    // For employees and managers, validate contract fields
+    if (formData.role === "employee" || formData.role === "manager") {
       if (!formData.hourly_rate || !formData.available_hours) {
         setFormError("Vul alle contract- en vakantiegegevens in voor medewerkers");
         return;
@@ -265,7 +266,7 @@ const Instellingen = () => {
           vakantietoeslag_percentage: parseFloat(formData.vakantietoeslag_percentage),
           bonus_percentage: parseFloat(formData.bonus_percentage),
           available_hours: parseFloat(formData.available_hours),
-          werkrooster: formData.role === "employee" ? {
+          werkrooster: (formData.role === "employee" || formData.role === "manager") ? {
             monday_hours: parseFloat(werkrooster.monday_hours) || 0,
             tuesday_hours: parseFloat(werkrooster.tuesday_hours) || 0,
             wednesday_hours: parseFloat(werkrooster.wednesday_hours) || 0,
@@ -289,6 +290,7 @@ const Instellingen = () => {
         password: "",
         role: "employee",
         dienstverband: "tijdelijk",
+        positie: "assistent",
         hourly_rate: "",
         vakantietoeslag_percentage: "8",
         bonus_percentage: "0",
@@ -545,8 +547,8 @@ const Instellingen = () => {
           </FormControl>
         </Box>
 
-        {/* Employee-specific fields */}
-        {formData.role === "employee" && (
+        {/* Employee and Manager contract fields */}
+        {(formData.role === "employee" || formData.role === "manager") && (
           <>
             <Divider sx={{ my: 3 }} />
             <Typography variant="h5" fontWeight="600" color={tableColors.cells.text} mb={2}>
@@ -564,6 +566,23 @@ const Instellingen = () => {
                   <MenuItem value="proeftijd">Proeftijd</MenuItem>
                   <MenuItem value="tijdelijk">Tijdelijk</MenuItem>
                   <MenuItem value="vast">Vast</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl fullWidth sx={inputStyles}>
+                <InputLabel>Positie</InputLabel>
+                <Select
+                  name="positie"
+                  value={formData.positie}
+                  onChange={handleInputChange}
+                  label="Positie"
+                >
+                  <MenuItem value="eigenaar">Eigenaar</MenuItem>
+                  <MenuItem value="praktijkmanager">Praktijkmanager</MenuItem>
+                  <MenuItem value="tandarts">Tandarts</MenuItem>
+                  <MenuItem value="mondhygienist">Mondhygiënist</MenuItem>
+                  <MenuItem value="preventie-assistent">Preventie-assistent</MenuItem>
+                  <MenuItem value="assistent">Assistent</MenuItem>
+                  <MenuItem value="balie-medewerker">Balie-medewerker</MenuItem>
                 </Select>
               </FormControl>
               <TextField
@@ -938,7 +957,6 @@ const Instellingen = () => {
             >
               <TableCell>Naam</TableCell>
               <TableCell>E-mailadres</TableCell>
-              <TableCell>Wachtwoord</TableCell>
               <TableCell>Rol</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Acties</TableCell>
@@ -985,30 +1003,6 @@ const Instellingen = () => {
                   </Typography>
                 </TableCell>
                 <TableCell sx={{ color: user.is_active ? tableColors.cells.text : tableColors.inactive.text }}>{user.email}</TableCell>
-                <TableCell>
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <Typography 
-                      sx={{ 
-                        fontFamily: "monospace",
-                        fontSize: "13px",
-                        color: tableColors.cells.text,
-                        minWidth: "80px",
-                      }}
-                    >
-                      {visiblePasswords[user.id] ? (user.plain_password || "-") : "••••••••"}
-                    </Typography>
-                    <IconButton
-                      size="small"
-                      onClick={() => togglePasswordVisibility(user.id)}
-                      sx={{ 
-                        color: colors.taupeAccent[500],
-                        padding: "4px",
-                      }}
-                    >
-                      {visiblePasswords[user.id] ? <VisibilityOffOutlinedIcon fontSize="small" /> : <VisibilityOutlinedIcon fontSize="small" />}
-                    </IconButton>
-                  </Box>
-                </TableCell>
                 <TableCell>
                   <Chip
                     label={getRoleDisplay(user.role)}

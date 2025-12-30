@@ -3,12 +3,79 @@ const cors = require("cors");
 const sqlite3 = require("sqlite3").verbose();
 const bcrypt = require("bcryptjs");
 const path = require("path");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Database path
 const dbPath = path.join(__dirname, "database.sqlite");
+
+// Email configuration for SiteGround
+const EMAIL_CONFIG = {
+  host: "mail.eemvalleitandartsen.nl",
+  port: 465,
+  secure: true, // true for port 465 (SSL)
+  auth: {
+    user: "info@eemvalleitandartsen.nl",
+    pass: "LaylaMichaelLief123!",
+  },
+};
+
+// Create email transporter (only if credentials are configured)
+let emailTransporter = null;
+if (EMAIL_CONFIG.auth.user && EMAIL_CONFIG.auth.pass) {
+  emailTransporter = nodemailer.createTransport(EMAIL_CONFIG);
+  console.log("Email notifications enabled");
+} else {
+  console.log("Email notifications disabled (SMTP credentials not configured)");
+}
+
+// Helper function to send email notifications
+async function sendEmailNotification(to, subject, htmlContent) {
+  if (!emailTransporter) {
+    console.log(`[Email disabled] Would send to ${to}: ${subject}`);
+    return;
+  }
+
+  try {
+    await emailTransporter.sendMail({
+      from: `"Eemvallei Tandartsen" <${EMAIL_CONFIG.auth.user}>`,
+      to,
+      subject,
+      html: htmlContent,
+    });
+    console.log(`Email sent to ${to}: ${subject}`);
+  } catch (err) {
+    console.error("Error sending email:", err.message);
+  }
+}
+
+// Helper function to recalculate all balances for an employee
+function recalculateAllBalances(employeeId) {
+  db.all(
+    `SELECT * FROM holiday_transactions WHERE employee_id = ? ORDER BY transaction_date ASC, id ASC`,
+    [employeeId],
+    (err, transactions) => {
+      if (err || !transactions || transactions.length === 0) return;
+
+      let runningBalance = 0;
+      transactions.forEach((t) => {
+        if (t.type === 'added') {
+          runningBalance += parseFloat(t.hours);
+        } else {
+          runningBalance -= parseFloat(t.hours);
+        }
+        // Update this transaction's balance_after
+        db.run(
+          `UPDATE holiday_transactions SET balance_after = ? WHERE id = ?`,
+          [runningBalance, t.id]
+        );
+      });
+      console.log(`Recalculated balances for employee ${employeeId}`);
+    }
+  );
+}
 
 // Middleware
 app.use(cors());
@@ -27,6 +94,68 @@ const connectDB = () => {
         console.log("Connected to SQLite database.");
         // Enable foreign keys
         db.run("PRAGMA foreign_keys = ON");
+        
+        // Add positie column to employee_contracts if it doesn't exist
+        db.all("PRAGMA table_info(employee_contracts)", (err, columns) => {
+          if (err) {
+            console.error("Error checking columns:", err.message);
+          } else {
+            const hasPositie = columns.some(col => col.name === 'positie');
+            if (!hasPositie) {
+              db.run(
+                "ALTER TABLE employee_contracts ADD COLUMN positie TEXT DEFAULT 'assistent'",
+                (alterErr) => {
+                  if (alterErr) {
+                    console.error("Error adding positie column:", alterErr.message);
+                  } else {
+                    console.log("Added positie column to employee_contracts table.");
+                    db.run("UPDATE employee_contracts SET positie = 'assistent' WHERE positie IS NULL OR positie = ''");
+                  }
+                }
+              );
+            }
+          }
+        });
+        
+        // Create vacation_requests table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS vacation_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            request_date DATE NOT NULL,
+            hours REAL NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+            reviewed_by INTEGER,
+            reviewed_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            FOREIGN KEY (reviewed_by) REFERENCES users(id)
+          )
+        `, (err) => {
+          if (err && !err.message.includes('already exists')) {
+            console.error("Error creating vacation_requests table:", err.message);
+          }
+        });
+        
+        // Create notifications table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('vacation_request', 'vacation_approved', 'vacation_rejected')),
+            reference_id INTEGER,
+            message TEXT NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `, (err) => {
+          if (err && !err.message.includes('already exists')) {
+            console.error("Error creating notifications table:", err.message);
+          }
+        });
+        
         resolve();
       }
     });
@@ -113,6 +242,7 @@ app.post("/api/users", (req, res) => {
     role,
     // Employee contract data
     dienstverband,
+    positie,
     hours_per_week,
     hourly_rate,
     vakantietoeslag_percentage,
@@ -149,8 +279,8 @@ app.post("/api/users", (req, res) => {
 
         const userId = this.lastID;
 
-        // If role is employee, create employee record and contract
-        if (role === "employee" && dienstverband) {
+        // If role is employee or manager, create employee record and contract
+        if ((role === "employee" || role === "manager") && dienstverband) {
           db.run(
             "INSERT INTO employees (user_id) VALUES (?)",
             [userId],
@@ -184,45 +314,24 @@ app.post("/api/users", (req, res) => {
                 }
               };
 
-              // Create contract for current month and remaining months of the year
-              for (let month = currentMonth; month <= 12; month++) {
-                db.run(
-                  `INSERT INTO employee_contracts 
-                   (employee_id, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                  [employeeId, currentYear, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
-                  function(contractErr) {
-                    if (!contractErr && this.lastID) {
-                      insertWorkSchedule(this.lastID);
-                    }
+              // Create single contract for the current month only
+              db.run(
+                `INSERT INTO employee_contracts 
+                 (employee_id, year, month, dienstverband, positie, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [employeeId, currentYear, currentMonth, dienstverband, positie || 'assistent', hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
+                function(contractErr) {
+                  if (!contractErr && this.lastID) {
+                    insertWorkSchedule(this.lastID);
                   }
-                );
-              }
+                }
+              );
 
-              // Create contracts for next year too
-              for (let month = 1; month <= 12; month++) {
-                db.run(
-                  `INSERT INTO employee_contracts 
-                   (employee_id, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                  [employeeId, currentYear + 1, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
-                  function(contractErr) {
-                    if (!contractErr && this.lastID) {
-                      insertWorkSchedule(this.lastID);
-                    }
-                  }
-                );
-              }
-
-              // Create holiday records
-              const years = [currentYear, currentYear + 1, currentYear + 2, currentYear + 3, currentYear + 4];
-              years.forEach((year) => {
-                const hours = (year === currentYear || year === currentYear + 1) ? (available_hours || 0) : 0;
-                db.run(
-                  `INSERT INTO employee_holidays (employee_id, year, available_hours, used_hours) VALUES (?, ?, ?, 0)`,
-                  [employeeId, year, hours]
-                );
-              });
+              // Create holiday record for current year only
+              db.run(
+                `INSERT INTO employee_holidays (employee_id, year, available_hours, used_hours) VALUES (?, ?, ?, 0)`,
+                [employeeId, currentYear, available_hours || 0]
+              );
 
               res.status(201).json({
                 id: userId,
@@ -271,7 +380,6 @@ app.put("/api/users/:id", (req, res) => {
 
       // If password is provided, hash it
       if (password && password.trim() !== "") {
-        const bcrypt = require("bcrypt");
         bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
           if (hashErr) {
             console.error("Hash error:", hashErr.message);
@@ -422,6 +530,7 @@ app.get("/api/employees", (req, res) => {
       u.name,
       u.email,
       ec.dienstverband,
+      ec.positie,
       ec.hours_per_week,
       ec.hourly_rate,
       ec.vakantietoeslag_percentage,
@@ -705,7 +814,7 @@ app.delete("/api/contracts/:id", (req, res) => {
 // Add a new contract record (doesn't replace, just adds)
 app.post("/api/employees/:id/contracts", (req, res) => {
   const employeeId = req.params.id;
-  const { year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage, werkrooster } = req.body;
+  const { year, month, dienstverband, positie, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage, werkrooster } = req.body;
 
   if (!year || !month || !dienstverband || hours_per_week === undefined || hourly_rate === undefined) {
     return res.status(400).json({ message: "Alle velden zijn verplicht" });
@@ -713,13 +822,13 @@ app.post("/api/employees/:id/contracts", (req, res) => {
 
   const query = `
     INSERT OR REPLACE INTO employee_contracts 
-    (employee_id, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (employee_id, year, month, dienstverband, positie, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.run(
     query,
-    [employeeId, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
+    [employeeId, year, month, dienstverband, positie || 'assistent', hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
     function (err) {
       if (err) {
         console.error("Database error:", err.message);
@@ -1037,6 +1146,380 @@ app.get("/api/employees/:id/work-schedule-for-date", (req, res) => {
     }
     res.json(row);
   });
+});
+
+// ==================== VACATION REQUESTS ====================
+
+// Create vacation request (employee submits)
+app.post("/api/vacation-requests", (req, res) => {
+  const { employee_id, user_id, request_date, hours, description } = req.body;
+
+  if (!employee_id || !request_date || !hours) {
+    return res.status(400).json({ message: "Alle verplichte velden moeten worden ingevuld" });
+  }
+
+  // Insert the vacation request
+  db.run(
+    `INSERT INTO vacation_requests (employee_id, request_date, hours, description, status)
+     VALUES (?, ?, ?, ?, 'pending')`,
+    [employee_id, request_date, hours, description || ''],
+    function(err) {
+      if (err) {
+        console.error("Error creating vacation request:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      const requestId = this.lastID;
+
+      // Get the requester's role and name to determine who should review
+      db.get(
+        `SELECT u.name, u.role FROM users u 
+         JOIN employees e ON u.id = e.user_id 
+         WHERE e.id = ?`,
+        [employee_id],
+        (err, requester) => {
+          if (err) {
+            console.error("Error fetching requester:", err.message);
+            return res.status(201).json({ id: requestId, message: "Aanvraag ingediend" });
+          }
+
+          // Determine who should receive the notification
+          // Employee requests -> Manager
+          // Manager requests -> Admin
+          let targetRole = requester.role === 'manager' ? 'admin' : 'manager';
+          
+          const notificationMessage = `${requester.name} heeft ${hours} vakantie-uren aangevraagd voor ${request_date}`;
+          
+          // Get all users with the target role
+          db.all(
+            `SELECT id, email, name FROM users WHERE role = ? AND is_active = 1`,
+            [targetRole],
+            (err, reviewers) => {
+              const sendNotificationsAndEmails = (users) => {
+                users.forEach(user => {
+                  // Create in-app notification
+                  createNotification(user.id, 'vacation_request', requestId, notificationMessage);
+                  
+                  // Send email notification
+                  const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                      <h2 style="color: #8B7355;">Vakantie Aanvraag</h2>
+                      <p>Beste ${user.name},</p>
+                      <p><strong>${requester.name}</strong> heeft een vakantie aanvraag ingediend:</p>
+                      <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p><strong>Datum:</strong> ${request_date}</p>
+                        <p><strong>Aantal uren:</strong> ${hours}</p>
+                        ${description ? `<p><strong>Beschrijving:</strong> ${description}</p>` : ''}
+                      </div>
+                      <p>Log in op het personeelsportaal om de aanvraag te beoordelen.</p>
+                      <p style="color: #888; font-size: 12px;">Eemvallei Tandartsen - Personeelsportaal</p>
+                    </div>
+                  `;
+                  sendEmailNotification(user.email, `Vakantie aanvraag van ${requester.name}`, emailHtml);
+                });
+              };
+
+              if (err || !reviewers || reviewers.length === 0) {
+                // Fallback to admin if no managers found
+                db.all(`SELECT id, email, name FROM users WHERE role = 'admin' AND is_active = 1`, (err, admins) => {
+                  if (admins && admins.length > 0) {
+                    sendNotificationsAndEmails(admins);
+                  }
+                });
+              } else {
+                sendNotificationsAndEmails(reviewers);
+              }
+            }
+          );
+
+          res.status(201).json({ id: requestId, message: "Aanvraag ingediend" });
+        }
+      );
+    }
+  );
+});
+
+// Helper function to create notifications
+function createNotification(userId, type, referenceId, message) {
+  db.run(
+    `INSERT INTO notifications (user_id, type, reference_id, message) VALUES (?, ?, ?, ?)`,
+    [userId, type, referenceId, message],
+    (err) => {
+      if (err) console.error("Error creating notification:", err.message);
+    }
+  );
+}
+
+// Get pending vacation requests (for reviewers)
+app.get("/api/vacation-requests", (req, res) => {
+  const { status, reviewer_role } = req.query;
+
+  let query = `
+    SELECT vr.*, u.name as employee_name, u.role as employee_role
+    FROM vacation_requests vr
+    JOIN employees e ON vr.employee_id = e.id
+    JOIN users u ON e.user_id = u.id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (status) {
+    query += ` AND vr.status = ?`;
+    params.push(status);
+  }
+
+  // If reviewer is manager, show employee requests
+  // If reviewer is admin, show manager requests (and employee if no managers)
+  if (reviewer_role === 'manager') {
+    query += ` AND u.role = 'employee'`;
+  } else if (reviewer_role === 'admin') {
+    query += ` AND u.role IN ('manager', 'employee')`;
+  }
+
+  query += ` ORDER BY vr.created_at DESC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Approve vacation request
+app.put("/api/vacation-requests/:id/approve", (req, res) => {
+  const requestId = req.params.id;
+  const { reviewer_id } = req.body;
+
+  // Get the request details including employee email
+  db.get(
+    `SELECT vr.*, e.id as emp_id, u.id as user_id, u.name as employee_name, u.email as employee_email
+     FROM vacation_requests vr
+     JOIN employees e ON vr.employee_id = e.id
+     JOIN users u ON e.user_id = u.id
+     WHERE vr.id = ?`,
+    [requestId],
+    (err, request) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      if (!request) {
+        return res.status(404).json({ message: "Aanvraag niet gevonden" });
+      }
+
+      // Update request status
+      db.run(
+        `UPDATE vacation_requests SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [reviewer_id, requestId],
+        function(updateErr) {
+          if (updateErr) {
+            console.error("Error updating request:", updateErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          // Add the hours to holiday_transactions
+          const year = new Date(request.request_date).getFullYear();
+          
+          // Get the transaction just BEFORE this date to calculate the correct balance
+          db.get(
+            `SELECT balance_after FROM holiday_transactions 
+             WHERE employee_id = ? AND (transaction_date < ? OR (transaction_date = ? AND id < (SELECT COALESCE(MAX(id), 0) + 1 FROM holiday_transactions)))
+             ORDER BY transaction_date DESC, id DESC 
+             LIMIT 1`,
+            [request.emp_id, request.request_date, request.request_date],
+            (err, prevTransaction) => {
+              const prevBalance = prevTransaction ? prevTransaction.balance_after : 0;
+              const newBalance = prevBalance - Math.abs(request.hours);
+
+              db.run(
+                `INSERT INTO holiday_transactions (employee_id, year, transaction_date, hours, description, type, balance_after)
+                 VALUES (?, ?, ?, ?, ?, 'used', ?)`,
+                [request.emp_id, year, request.request_date, Math.abs(request.hours), request.description || 'Vakantie', newBalance],
+                function(transErr) {
+                  if (transErr) {
+                    console.error("Error creating transaction:", transErr.message);
+                  }
+
+                  // Recalculate all balances after this transaction
+                  recalculateAllBalances(request.emp_id);
+
+                  // Update employee_holidays
+                  db.run(
+                    `INSERT INTO employee_holidays (employee_id, year, available_hours, used_hours)
+                     VALUES (?, ?, 0, ?)
+                     ON CONFLICT(employee_id, year) DO UPDATE SET used_hours = used_hours + ?`,
+                    [request.emp_id, year, Math.abs(request.hours), Math.abs(request.hours)]
+                  );
+
+                  // Create in-app notification for the employee
+                  createNotification(request.user_id, 'vacation_approved', requestId,
+                    `Je vakantieaanvraag voor ${request.request_date} (${request.hours} uur) is goedgekeurd`);
+
+                  // Send email notification to the employee
+                  const emailHtml = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                      <h2 style="color: #4CAF50;">✓ Vakantie Goedgekeurd</h2>
+                      <p>Beste ${request.employee_name},</p>
+                      <p>Je vakantieaanvraag is <strong style="color: #4CAF50;">goedgekeurd</strong>!</p>
+                      <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4CAF50;">
+                        <p><strong>Datum:</strong> ${request.request_date}</p>
+                        <p><strong>Aantal uren:</strong> ${request.hours}</p>
+                        ${request.description ? `<p><strong>Beschrijving:</strong> ${request.description}</p>` : ''}
+                      </div>
+                      <p>De uren zijn afgeschreven van je vakantiesaldo.</p>
+                      <p style="color: #888; font-size: 12px;">Eemvallei Tandartsen - Personeelsportaal</p>
+                    </div>
+                  `;
+                  sendEmailNotification(request.employee_email, 'Vakantie goedgekeurd ✓', emailHtml);
+
+                  res.json({ message: "Aanvraag goedgekeurd" });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Reject vacation request
+app.put("/api/vacation-requests/:id/reject", (req, res) => {
+  const requestId = req.params.id;
+  const { reviewer_id, reason } = req.body;
+
+  // Get the request details including employee email
+  db.get(
+    `SELECT vr.*, u.id as user_id, u.name as employee_name, u.email as employee_email
+     FROM vacation_requests vr
+     JOIN employees e ON vr.employee_id = e.id
+     JOIN users u ON e.user_id = u.id
+     WHERE vr.id = ?`,
+    [requestId],
+    (err, request) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      if (!request) {
+        return res.status(404).json({ message: "Aanvraag niet gevonden" });
+      }
+
+      // Update request status to rejected
+      db.run(
+        `UPDATE vacation_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [reviewer_id, requestId],
+        function(updateErr) {
+          if (updateErr) {
+            console.error("Error updating request:", updateErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          // Create in-app notification for the employee
+          const rejectMessage = reason 
+            ? `Je vakantieaanvraag voor ${request.request_date} (${request.hours} uur) is afgewezen. Reden: ${reason}`
+            : `Je vakantieaanvraag voor ${request.request_date} (${request.hours} uur) is afgewezen`;
+          
+          createNotification(request.user_id, 'vacation_rejected', requestId, rejectMessage);
+
+          // Send email notification to the employee
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #f44336;">✗ Vakantie Afgewezen</h2>
+              <p>Beste ${request.employee_name},</p>
+              <p>Je vakantieaanvraag is helaas <strong style="color: #f44336;">afgewezen</strong>.</p>
+              <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f44336;">
+                <p><strong>Datum:</strong> ${request.request_date}</p>
+                <p><strong>Aantal uren:</strong> ${request.hours}</p>
+                ${request.description ? `<p><strong>Beschrijving:</strong> ${request.description}</p>` : ''}
+                ${reason ? `<p><strong>Reden afwijzing:</strong> ${reason}</p>` : ''}
+              </div>
+              <p>Neem contact op met je leidinggevende voor meer informatie.</p>
+              <p style="color: #888; font-size: 12px;">Eemvallei Tandartsen - Personeelsportaal</p>
+            </div>
+          `;
+          sendEmailNotification(request.employee_email, 'Vakantie afgewezen', emailHtml);
+
+          res.json({ message: "Aanvraag afgewezen" });
+        }
+      );
+    }
+  );
+});
+
+// ==================== NOTIFICATIONS ====================
+
+// Get notifications for a user
+app.get("/api/notifications/:userId", (req, res) => {
+  const userId = req.params.userId;
+  const { unread_only } = req.query;
+
+  let query = `SELECT * FROM notifications WHERE user_id = ?`;
+  if (unread_only === 'true') {
+    query += ` AND is_read = 0`;
+  }
+  query += ` ORDER BY created_at DESC`;
+
+  db.all(query, [userId], (err, rows) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Get unread notification count
+app.get("/api/notifications/:userId/count", (req, res) => {
+  const userId = req.params.userId;
+
+  db.get(
+    `SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      res.json({ count: row ? row.count : 0 });
+    }
+  );
+});
+
+// Mark notification as read
+app.put("/api/notifications/:id/read", (req, res) => {
+  const notificationId = req.params.id;
+
+  db.run(
+    `UPDATE notifications SET is_read = 1 WHERE id = ?`,
+    [notificationId],
+    function(err) {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      res.json({ message: "Notificatie gelezen" });
+    }
+  );
+});
+
+// Mark all notifications as read for a user
+app.put("/api/notifications/:userId/read-all", (req, res) => {
+  const userId = req.params.userId;
+
+  db.run(
+    `UPDATE notifications SET is_read = 1 WHERE user_id = ?`,
+    [userId],
+    function(err) {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+      res.json({ message: "Alle notificaties gelezen" });
+    }
+  );
 });
 
 // Start server
