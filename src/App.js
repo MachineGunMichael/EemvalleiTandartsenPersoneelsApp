@@ -70,7 +70,7 @@ function App() {
         <MainLayout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee") && (
+            {(currentRole === "manager" || currentRole === "employee") && (
               <Route path="/vakantie" element={<Vakantie />} />
             )}
             {(currentRole === "admin" || currentRole === "manager") && (

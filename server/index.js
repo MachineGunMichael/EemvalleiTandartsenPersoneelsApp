@@ -117,7 +117,8 @@ app.post("/api/users", (req, res) => {
     hourly_rate,
     vakantietoeslag_percentage,
     bonus_percentage,
-    available_hours
+    available_hours,
+    werkrooster
   } = req.body;
 
   if (!email || !password || !name || !role) {
@@ -160,6 +161,28 @@ app.post("/api/users", (req, res) => {
               }
 
               const employeeId = this.lastID;
+              const contractIds = [];
+
+              // Helper to insert work schedule for a contract
+              const insertWorkSchedule = (contractId) => {
+                if (werkrooster) {
+                  db.run(
+                    `INSERT INTO contract_work_schedule 
+                     (contract_id, monday_hours, tuesday_hours, wednesday_hours, thursday_hours, friday_hours, saturday_hours, sunday_hours)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      contractId,
+                      werkrooster.monday_hours || 0,
+                      werkrooster.tuesday_hours || 0,
+                      werkrooster.wednesday_hours || 0,
+                      werkrooster.thursday_hours || 0,
+                      werkrooster.friday_hours || 0,
+                      werkrooster.saturday_hours || 0,
+                      werkrooster.sunday_hours || 0,
+                    ]
+                  );
+                }
+              };
 
               // Create contract for current month and remaining months of the year
               for (let month = currentMonth; month <= 12; month++) {
@@ -167,7 +190,12 @@ app.post("/api/users", (req, res) => {
                   `INSERT INTO employee_contracts 
                    (employee_id, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                  [employeeId, currentYear, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0]
+                  [employeeId, currentYear, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
+                  function(contractErr) {
+                    if (!contractErr && this.lastID) {
+                      insertWorkSchedule(this.lastID);
+                    }
+                  }
                 );
               }
 
@@ -177,7 +205,12 @@ app.post("/api/users", (req, res) => {
                   `INSERT INTO employee_contracts 
                    (employee_id, year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                  [employeeId, currentYear + 1, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0]
+                  [employeeId, currentYear + 1, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage || 8, bonus_percentage || 0],
+                  function(contractErr) {
+                    if (!contractErr && this.lastID) {
+                      insertWorkSchedule(this.lastID);
+                    }
+                  }
                 );
               }
 
@@ -211,6 +244,74 @@ app.post("/api/users", (req, res) => {
       }
     );
   });
+});
+
+// Update user details
+app.put("/api/users/:id", (req, res) => {
+  const userId = req.params.id;
+  const { name, email, password, role } = req.body;
+
+  if (!name || !email) {
+    return res.status(400).json({ message: "Naam en e-mailadres zijn verplicht" });
+  }
+
+  // Check if email is already used by another user
+  db.get(
+    "SELECT id FROM users WHERE email = ? AND id != ?",
+    [email, userId],
+    (err, existingUser) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      if (existingUser) {
+        return res.status(400).json({ message: "Dit e-mailadres is al in gebruik" });
+      }
+
+      // If password is provided, hash it
+      if (password && password.trim() !== "") {
+        const bcrypt = require("bcrypt");
+        bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
+          if (hashErr) {
+            console.error("Hash error:", hashErr.message);
+            return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+          }
+
+          db.run(
+            "UPDATE users SET name = ?, email = ?, password = ?, role = ? WHERE id = ?",
+            [name, email, hashedPassword, role, userId],
+            function (updateErr) {
+              if (updateErr) {
+                console.error("Database error:", updateErr.message);
+                return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+              }
+              if (this.changes === 0) {
+                return res.status(404).json({ message: "Gebruiker niet gevonden" });
+              }
+              res.json({ message: "Gebruiker bijgewerkt" });
+            }
+          );
+        });
+      } else {
+        // Update without changing password
+        db.run(
+          "UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?",
+          [name, email, role, userId],
+          function (updateErr) {
+            if (updateErr) {
+              console.error("Database error:", updateErr.message);
+              return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+            }
+            if (this.changes === 0) {
+              return res.status(404).json({ message: "Gebruiker niet gevonden" });
+            }
+            res.json({ message: "Gebruiker bijgewerkt" });
+          }
+        );
+      }
+    }
+  );
 });
 
 // Deactivate user (soft delete - admin only)
@@ -312,8 +413,8 @@ app.delete("/api/users/:id", (req, res) => {
 // Used by admin and manager to see all employees
 app.get("/api/employees", (req, res) => {
   const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
 
+  // Fetch most recent contract for each employee (not just current month)
   const query = `
     SELECT 
       e.id as employee_id,
@@ -327,18 +428,30 @@ app.get("/api/employees", (req, res) => {
       ec.bonus_percentage,
       eh.available_hours,
       eh.used_hours,
-      eh.year as holiday_year
+      eh.year as holiday_year,
+      cws.monday_hours,
+      cws.tuesday_hours,
+      cws.wednesday_hours,
+      cws.thursday_hours,
+      cws.friday_hours,
+      cws.saturday_hours,
+      cws.sunday_hours
     FROM employees e
     JOIN users u ON e.user_id = u.id
-    LEFT JOIN employee_contracts ec ON e.id = ec.employee_id 
-      AND ec.year = ? AND ec.month = ?
+    LEFT JOIN employee_contracts ec ON ec.id = (
+      SELECT id FROM employee_contracts 
+      WHERE employee_id = e.id 
+      ORDER BY year DESC, month DESC 
+      LIMIT 1
+    )
     LEFT JOIN employee_holidays eh ON e.id = eh.employee_id 
       AND eh.year = ?
+    LEFT JOIN contract_work_schedule cws ON ec.id = cws.contract_id
     WHERE u.is_active = 1
     ORDER BY u.name
   `;
 
-  db.all(query, [currentYear, currentMonth, currentYear], (err, employees) => {
+  db.all(query, [currentYear], (err, employees) => {
     if (err) {
       console.error("Database error:", err.message);
       return res.status(500).json({ message: "Er is een serverfout opgetreden" });
@@ -392,8 +505,8 @@ app.get("/api/employees/:id", (req, res) => {
 app.get("/api/employees/user/:userId", (req, res) => {
   const userId = req.params.userId;
   const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
 
+  // Fetch most recent contract (not just current month)
   const query = `
     SELECT 
       e.id as employee_id,
@@ -407,17 +520,29 @@ app.get("/api/employees/user/:userId", (req, res) => {
       ec.bonus_percentage,
       eh.available_hours,
       eh.used_hours,
-      eh.year as holiday_year
+      eh.year as holiday_year,
+      cws.monday_hours,
+      cws.tuesday_hours,
+      cws.wednesday_hours,
+      cws.thursday_hours,
+      cws.friday_hours,
+      cws.saturday_hours,
+      cws.sunday_hours
     FROM employees e
     JOIN users u ON e.user_id = u.id
-    LEFT JOIN employee_contracts ec ON e.id = ec.employee_id 
-      AND ec.year = ? AND ec.month = ?
+    LEFT JOIN employee_contracts ec ON ec.id = (
+      SELECT id FROM employee_contracts 
+      WHERE employee_id = e.id 
+      ORDER BY year DESC, month DESC 
+      LIMIT 1
+    )
     LEFT JOIN employee_holidays eh ON e.id = eh.employee_id 
       AND eh.year = ?
+    LEFT JOIN contract_work_schedule cws ON ec.id = cws.contract_id
     WHERE u.id = ?
   `;
 
-  db.get(query, [currentYear, currentMonth, currentYear, userId], (err, employee) => {
+  db.get(query, [currentYear, userId], (err, employee) => {
     if (err) {
       console.error("Database error:", err.message);
       return res.status(500).json({ message: "Er is een serverfout opgetreden" });
@@ -524,10 +649,20 @@ app.get("/api/employees/:id/contract-history", (req, res) => {
   const employeeId = req.params.id;
 
   const query = `
-    SELECT ec.*, u.name as employee_name
+    SELECT 
+      ec.*, 
+      u.name as employee_name,
+      cws.monday_hours,
+      cws.tuesday_hours,
+      cws.wednesday_hours,
+      cws.thursday_hours,
+      cws.friday_hours,
+      cws.saturday_hours,
+      cws.sunday_hours
     FROM employee_contracts ec
     JOIN employees e ON ec.employee_id = e.id
     JOIN users u ON e.user_id = u.id
+    LEFT JOIN contract_work_schedule cws ON ec.id = cws.contract_id
     WHERE ec.employee_id = ?
     ORDER BY ec.year DESC, ec.month DESC
   `;
@@ -541,10 +676,36 @@ app.get("/api/employees/:id/contract-history", (req, res) => {
   });
 });
 
+// Delete a contract by ID
+app.delete("/api/contracts/:id", (req, res) => {
+  const contractId = req.params.id;
+
+  // First delete associated work schedule
+  db.run("DELETE FROM contract_work_schedule WHERE contract_id = ?", [contractId], (wsErr) => {
+    if (wsErr) {
+      console.error("Error deleting work schedule:", wsErr.message);
+    }
+
+    // Then delete the contract
+    db.run("DELETE FROM employee_contracts WHERE id = ?", [contractId], function (err) {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({ message: "Contract niet gevonden" });
+      }
+
+      res.json({ message: "Contract verwijderd", id: contractId });
+    });
+  });
+});
+
 // Add a new contract record (doesn't replace, just adds)
 app.post("/api/employees/:id/contracts", (req, res) => {
   const employeeId = req.params.id;
-  const { year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage } = req.body;
+  const { year, month, dienstverband, hours_per_week, hourly_rate, vakantietoeslag_percentage, bonus_percentage, werkrooster } = req.body;
 
   if (!year || !month || !dienstverband || hours_per_week === undefined || hourly_rate === undefined) {
     return res.status(400).json({ message: "Alle velden zijn verplicht" });
@@ -564,7 +725,42 @@ app.post("/api/employees/:id/contracts", (req, res) => {
         console.error("Database error:", err.message);
         return res.status(500).json({ message: "Er is een serverfout opgetreden" });
       }
-      res.status(201).json({ message: "Contract toegevoegd", id: this.lastID });
+
+      const contractId = this.lastID;
+
+      // If werkrooster is provided, save it
+      if (werkrooster) {
+        // First delete any existing work schedule for this contract
+        db.run("DELETE FROM contract_work_schedule WHERE contract_id = ?", [contractId], (delErr) => {
+          if (delErr) {
+            console.error("Error deleting old work schedule:", delErr.message);
+          }
+          
+          // Insert the new work schedule
+          db.run(
+            `INSERT INTO contract_work_schedule 
+             (contract_id, monday_hours, tuesday_hours, wednesday_hours, thursday_hours, friday_hours, saturday_hours, sunday_hours)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              contractId,
+              werkrooster.monday_hours || 0,
+              werkrooster.tuesday_hours || 0,
+              werkrooster.wednesday_hours || 0,
+              werkrooster.thursday_hours || 0,
+              werkrooster.friday_hours || 0,
+              werkrooster.saturday_hours || 0,
+              werkrooster.sunday_hours || 0,
+            ],
+            (wsErr) => {
+              if (wsErr) {
+                console.error("Error saving work schedule:", wsErr.message);
+              }
+            }
+          );
+        });
+      }
+
+      res.status(201).json({ message: "Contract toegevoegd", id: contractId });
     }
   );
 });
@@ -601,13 +797,16 @@ app.post("/api/employees/:id/holiday-transactions", (req, res) => {
   const employeeId = req.params.id;
   const { year, transaction_date, type, hours, description } = req.body;
 
-  if (!year || !transaction_date || !type || !hours) {
+  if (!year || !transaction_date || !type || hours === undefined || hours === null || hours === '') {
     return res.status(400).json({ message: "Alle velden zijn verplicht" });
   }
 
   if (type !== 'added' && type !== 'used') {
     return res.status(400).json({ message: "Type moet 'added' of 'used' zijn" });
   }
+
+  // Allow negative hours for corrections
+  const parsedHours = parseFloat(hours);
 
   // First get current balance
   db.get(
@@ -655,12 +854,15 @@ app.post("/api/employees/:id/holiday-transactions", (req, res) => {
                 return res.status(500).json({ message: "Er is een serverfout opgetreden" });
               }
 
-              res.status(201).json({
-                message: type === 'added' ? "Uren toegevoegd" : "Uren gebruikt",
-                transaction_id: this.lastID,
-                balance_after: balanceAfter,
-                available_hours: newAvailable,
-                used_hours: newUsed
+              // Recalculate all balance_after values for this employee
+              recalculateBalances(db, employeeId, () => {
+                res.status(201).json({
+                  message: type === 'added' ? "Uren toegevoegd" : "Uren gebruikt",
+                  transaction_id: this.lastID,
+                  balance_after: balanceAfter,
+                  available_hours: newAvailable,
+                  used_hours: newUsed
+                });
               });
             }
           );
@@ -668,6 +870,173 @@ app.post("/api/employees/:id/holiday-transactions", (req, res) => {
       );
     }
   );
+});
+
+// Helper function to recalculate all balance_after values for an employee
+function recalculateBalances(db, employeeId, callback) {
+  // Get all transactions sorted by date
+  db.all(
+    `SELECT * FROM holiday_transactions WHERE employee_id = ? ORDER BY transaction_date ASC, id ASC`,
+    [employeeId],
+    (err, transactions) => {
+      if (err || !transactions || transactions.length === 0) {
+        if (callback) callback();
+        return;
+      }
+
+      let runningBalance = 0;
+      const yearlySummary = {}; // Track totals per year
+
+      const updatePromises = transactions.map((t, idx) => {
+        return new Promise((resolve) => {
+          if (t.type === 'added') {
+            runningBalance += parseFloat(t.hours);
+          } else if (t.type === 'used') {
+            runningBalance -= parseFloat(t.hours);
+          }
+
+          // Track yearly totals
+          if (!yearlySummary[t.year]) {
+            yearlySummary[t.year] = { available: 0, used: 0 };
+          }
+          if (t.type === 'added') {
+            yearlySummary[t.year].available += parseFloat(t.hours);
+          } else {
+            yearlySummary[t.year].used += parseFloat(t.hours);
+          }
+
+          db.run(
+            `UPDATE holiday_transactions SET balance_after = ? WHERE id = ?`,
+            [runningBalance, t.id],
+            () => resolve()
+          );
+        });
+      });
+
+      Promise.all(updatePromises).then(() => {
+        // Update employee_holidays table for each year
+        const yearUpdates = Object.entries(yearlySummary).map(([year, totals]) => {
+          return new Promise((resolve) => {
+            db.run(
+              `INSERT OR REPLACE INTO employee_holidays (employee_id, year, available_hours, used_hours, updated_at)
+               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+              [employeeId, year, totals.available, totals.used],
+              () => resolve()
+            );
+          });
+        });
+
+        Promise.all(yearUpdates).then(() => {
+          if (callback) callback();
+        });
+      });
+    }
+  );
+}
+
+// Delete a holiday transaction
+app.delete("/api/holiday-transactions/:id", (req, res) => {
+  const transactionId = req.params.id;
+
+  // First get the employee_id from the transaction
+  db.get(
+    "SELECT employee_id FROM holiday_transactions WHERE id = ?",
+    [transactionId],
+    (err, transaction) => {
+      if (err) {
+        console.error("Database error:", err.message);
+        return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+      }
+
+      if (!transaction) {
+        return res.status(404).json({ message: "Transactie niet gevonden" });
+      }
+
+      const employeeId = transaction.employee_id;
+
+      // Delete the transaction
+      db.run("DELETE FROM holiday_transactions WHERE id = ?", [transactionId], function (deleteErr) {
+        if (deleteErr) {
+          console.error("Database error:", deleteErr.message);
+          return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+        }
+
+        if (this.changes === 0) {
+          return res.status(404).json({ message: "Transactie niet gevonden" });
+        }
+
+        // Recalculate all balances for this employee
+        recalculateBalances(db, employeeId, () => {
+          res.json({ message: "Transactie verwijderd", id: transactionId });
+        });
+      });
+    }
+  );
+});
+
+// Get current work schedule for an employee (based on latest contract)
+app.get("/api/employees/:id/work-schedule", (req, res) => {
+  const employeeId = req.params.id;
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  // Get the most recent contract's work schedule
+  const query = `
+    SELECT cws.*, ec.year, ec.month, ec.hours_per_week
+    FROM contract_work_schedule cws
+    JOIN employee_contracts ec ON cws.contract_id = ec.id
+    WHERE ec.employee_id = ?
+    ORDER BY ec.year DESC, ec.month DESC
+    LIMIT 1
+  `;
+
+  db.get(query, [employeeId], (err, row) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    if (!row) {
+      return res.status(404).json({ message: "Geen werkrooster gevonden" });
+    }
+    res.json(row);
+  });
+});
+
+// Get work schedule for a specific date (finds the applicable contract)
+app.get("/api/employees/:id/work-schedule-for-date", (req, res) => {
+  const employeeId = req.params.id;
+  const { date } = req.query; // YYYY-MM-DD format
+
+  if (!date) {
+    return res.status(400).json({ message: "Datum is verplicht" });
+  }
+
+  const dateObj = new Date(date);
+  const year = dateObj.getFullYear();
+  const month = dateObj.getMonth() + 1;
+
+  // Find the contract that was active for this date
+  // (the most recent contract that started on or before this date)
+  const query = `
+    SELECT cws.*, ec.year, ec.month, ec.hours_per_week
+    FROM contract_work_schedule cws
+    JOIN employee_contracts ec ON cws.contract_id = ec.id
+    WHERE ec.employee_id = ?
+      AND (ec.year < ? OR (ec.year = ? AND ec.month <= ?))
+    ORDER BY ec.year DESC, ec.month DESC
+    LIMIT 1
+  `;
+
+  db.get(query, [employeeId, year, year, month], (err, row) => {
+    if (err) {
+      console.error("Database error:", err.message);
+      return res.status(500).json({ message: "Er is een serverfout opgetreden" });
+    }
+    if (!row) {
+      return res.status(404).json({ message: "Geen werkrooster gevonden voor deze datum" });
+    }
+    res.json(row);
+  });
 });
 
 // Start server

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -24,6 +25,7 @@ const Dashboard = () => {
   const isDarkMode = theme.palette.mode === "dark";
   const { user } = useAuth();
   const { currentRole } = useAppContext();
+  const location = useLocation(); // Used to trigger refetch on navigation
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -115,7 +117,7 @@ const Dashboard = () => {
     if (user) {
       fetchEmployees();
     }
-  }, [currentRole, user]);
+  }, [currentRole, user, location.key]); // location.key triggers refetch on navigation
 
   // Fetch contract history for employee role
   useEffect(() => {
@@ -136,7 +138,7 @@ const Dashboard = () => {
     };
 
     fetchContractHistory();
-  }, [currentRole, user]);
+  }, [currentRole, user, location.key]); // location.key triggers refetch on navigation
 
   // Helper function to get dienstverband chip color
   const getDienstverbandColor = (type) => {
@@ -209,6 +211,31 @@ const Dashboard = () => {
                 <TableCell>Naam</TableCell>
                 <TableCell>Dienstverband</TableCell>
                 <TableCell>Uren/week</TableCell>
+                <TableCell sx={{ px: 1 }}>
+                  <Box sx={{ textAlign: "center" }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ mb: 0.5 }}>
+                      Werkrooster
+                    </Typography>
+                    <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
+                      {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((day) => (
+                        <Typography
+                          key={day}
+                          variant="caption"
+                          sx={{
+                            width: 22,
+                            textAlign: "center",
+                            fontSize: "10px",
+                            fontWeight: 500,
+                            color: tableColors.header.text,
+                            opacity: 0.8,
+                          }}
+                        >
+                          {day}
+                        </Typography>
+                      ))}
+                    </Box>
+                  </Box>
+                </TableCell>
                 <TableCell>Bruto uurloon</TableCell>
                 <TableCell>Vakantietoeslag</TableCell>
                 <TableCell>Bonus</TableCell>
@@ -259,6 +286,55 @@ const Dashboard = () => {
                     <Typography>
                       {employee.hours_per_week ? `${employee.hours_per_week} uur` : "-"}
                     </Typography>
+                  </TableCell>
+                  <TableCell sx={{ px: 1 }}>
+                    <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
+                      {[
+                        employee.monday_hours,
+                        employee.tuesday_hours,
+                        employee.wednesday_hours,
+                        employee.thursday_hours,
+                        employee.friday_hours,
+                        employee.saturday_hours,
+                        employee.sunday_hours,
+                      ].map((hours, i) => (
+                        <Box
+                          key={i}
+                          sx={{
+                            width: 22,
+                            height: 22,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderRadius: "4px",
+                            backgroundColor:
+                              hours > 0
+                                ? isDarkMode
+                                  ? colors.taupeAccent[600]
+                                  : colors.taupeAccent[200]
+                                : "transparent",
+                            border: hours > 0 ? "none" : `1px solid ${colors.primary[300]}`,
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontSize: "10px",
+                              fontWeight: hours > 0 ? 600 : 400,
+                              color: hours > 0
+                                ? isDarkMode
+                                  ? colors.primary[900]   // ← DARK MODE: hours > 0
+                                  : colors.primary[900]   // ← LIGHT MODE: hours > 0
+                                : isDarkMode
+                                  ? colors.primary[700]   // ← DARK MODE: hours = 0
+                                  : colors.primary[400],  // ← LIGHT MODE: hours = 0
+                            }}
+                          >
+                            {hours ?? 0}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Typography fontWeight="500">

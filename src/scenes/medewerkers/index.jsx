@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -19,15 +19,23 @@ import {
   CircularProgress,
   Alert,
   Divider,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { nl } from "date-fns/locale";
-import { ResponsiveLine } from "@nivo/line";
 import { tokens } from "../../theme";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import HolidayOverviewTable from "../../components/HolidayOverviewTable";
+import HolidayChart from "../../components/HolidayChart";
 
 const Medewerkers = () => {
   const theme = useTheme();
@@ -49,11 +57,24 @@ const Medewerkers = () => {
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
     dienstverband: "tijdelijk",
-    hours_per_week: "",
     hourly_rate: "",
     vakantietoeslag_percentage: "8",
     bonus_percentage: "0",
   });
+
+  // Werkrooster state for contract editing
+  const [werkrooster, setWerkrooster] = useState({
+    monday_hours: 0,
+    tuesday_hours: 0,
+    wednesday_hours: 0,
+    thursday_hours: 0,
+    friday_hours: 0,
+    saturday_hours: 0,
+    sunday_hours: 0,
+  });
+
+  // Calculate total hours per week from werkrooster
+  const calculatedHoursPerWeek = Object.values(werkrooster).reduce((sum, h) => sum + (parseFloat(h) || 0), 0);
 
   // Add hours form state
   const [addHoursForm, setAddHoursForm] = useState({
@@ -61,6 +82,12 @@ const Medewerkers = () => {
     hours: "",
     description: "",
   });
+
+  // Delete contract dialog state
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, contract: null });
+
+  // Delete transaction dialog state
+  const [deleteTransactionDialog, setDeleteTransactionDialog] = useState({ open: false, transaction: null });
 
   // ============================================
   // TABLE COLOR CONFIGURATION
@@ -112,22 +139,6 @@ const Medewerkers = () => {
     },
   };
   // ============================================
-
-  // Chart theme
-  const chartTheme = {
-    axis: {
-      ticks: {
-        text: { fill: isDarkMode ? colors.primary[900] : colors.primary[800] },
-        line: { stroke: isDarkMode ? colors.primary[600] : colors.primary[400] },
-      },
-      legend: {
-        text: { fill: isDarkMode ? colors.primary[900] : colors.primary[800] },
-      },
-    },
-    grid: {
-      line: { stroke: isDarkMode ? colors.primary[500] : colors.primary[300] },
-    },
-  };
 
   // Auto-dismiss messages
   useEffect(() => {
@@ -195,10 +206,19 @@ const Medewerkers = () => {
               year: new Date().getFullYear(),
               month: new Date().getMonth() + 1,
               dienstverband: current.dienstverband,
-              hours_per_week: current.hours_per_week.toString(),
               hourly_rate: current.hourly_rate.toString(),
               vakantietoeslag_percentage: current.vakantietoeslag_percentage.toString(),
               bonus_percentage: current.bonus_percentage.toString(),
+            });
+            // Pre-fill werkrooster from current contract
+            setWerkrooster({
+              monday_hours: current.monday_hours || 0,
+              tuesday_hours: current.tuesday_hours || 0,
+              wednesday_hours: current.wednesday_hours || 0,
+              thursday_hours: current.thursday_hours || 0,
+              friday_hours: current.friday_hours || 0,
+              saturday_hours: current.saturday_hours || 0,
+              sunday_hours: current.sunday_hours || 0,
             });
           }
         }
@@ -247,6 +267,12 @@ const Medewerkers = () => {
     setFormError("");
     setFormSuccess("");
 
+    // Validate werkrooster
+    if (calculatedHoursPerWeek === 0) {
+      setFormError("Vul minimaal één werkdag in voor het werkrooster");
+      return;
+    }
+
     try {
       const response = await fetch(
         `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/contracts`,
@@ -257,10 +283,19 @@ const Medewerkers = () => {
             year: parseInt(contractForm.year),
             month: parseInt(contractForm.month),
             dienstverband: contractForm.dienstverband,
-            hours_per_week: parseFloat(contractForm.hours_per_week),
+            hours_per_week: calculatedHoursPerWeek,
             hourly_rate: parseFloat(contractForm.hourly_rate),
             vakantietoeslag_percentage: parseFloat(contractForm.vakantietoeslag_percentage),
             bonus_percentage: parseFloat(contractForm.bonus_percentage),
+            werkrooster: {
+              monday_hours: parseFloat(werkrooster.monday_hours) || 0,
+              tuesday_hours: parseFloat(werkrooster.tuesday_hours) || 0,
+              wednesday_hours: parseFloat(werkrooster.wednesday_hours) || 0,
+              thursday_hours: parseFloat(werkrooster.thursday_hours) || 0,
+              friday_hours: parseFloat(werkrooster.friday_hours) || 0,
+              saturday_hours: parseFloat(werkrooster.saturday_hours) || 0,
+              sunday_hours: parseFloat(werkrooster.sunday_hours) || 0,
+            },
           }),
         }
       );
@@ -332,6 +367,93 @@ const Medewerkers = () => {
     }
   };
 
+  // Handle delete contract
+  const handleDeleteContract = async () => {
+    if (!deleteDialog.contract) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:5001/api/contracts/${deleteDialog.contract.id}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Fout bij verwijderen contract");
+      }
+
+      setFormSuccess("Contract verwijderd");
+      
+      // Refresh contract history
+      const refreshRes = await fetch(
+        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/contract-history`
+      );
+      if (refreshRes.ok) {
+        const contracts = await refreshRes.json();
+        setContractHistory(contracts);
+        // Update werkrooster form with the new latest contract
+        if (contracts.length > 0) {
+          const current = contracts[0];
+          setContractForm({
+            year: new Date().getFullYear(),
+            month: new Date().getMonth() + 1,
+            dienstverband: current.dienstverband,
+            hourly_rate: current.hourly_rate.toString(),
+            vakantietoeslag_percentage: current.vakantietoeslag_percentage.toString(),
+            bonus_percentage: current.bonus_percentage.toString(),
+          });
+          setWerkrooster({
+            monday_hours: current.monday_hours || 0,
+            tuesday_hours: current.tuesday_hours || 0,
+            wednesday_hours: current.wednesday_hours || 0,
+            thursday_hours: current.thursday_hours || 0,
+            friday_hours: current.friday_hours || 0,
+            saturday_hours: current.saturday_hours || 0,
+            sunday_hours: current.sunday_hours || 0,
+          });
+        }
+      }
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setDeleteDialog({ open: false, contract: null });
+    }
+  };
+
+  // Handle delete holiday transaction
+  const handleDeleteTransaction = async () => {
+    if (!deleteTransactionDialog.transaction) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:5001/api/holiday-transactions/${deleteTransactionDialog.transaction.id}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Fout bij verwijderen transactie");
+      }
+
+      setFormSuccess("Transactie verwijderd");
+      
+      // Refresh holiday data and transactions
+      const holidayRes = await fetch(
+        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holidays`
+      );
+      if (holidayRes.ok) setHolidayData(await holidayRes.json());
+
+      const transRes = await fetch(
+        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holiday-transactions`
+      );
+      if (transRes.ok) setHolidayTransactions(await transRes.json());
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setDeleteTransactionDialog({ open: false, transaction: null });
+    }
+  };
+
   // Format helpers
   const formatCurrency = (value) => `€${parseFloat(value).toFixed(2)}`;
   const formatPercentage = (value) => `${parseFloat(value).toFixed(1)}%`;
@@ -340,59 +462,6 @@ const Medewerkers = () => {
     return months[month - 1] || "";
   };
   const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
-
-  // Format time label for chart (dd-MM-YYYY)
-  const formatTimeLabel = (value) => {
-    if (!value) return "";
-    const date = new Date(value);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
-  };
-
-  // Build chart data from transactions
-  const chartData = useMemo(() => {
-    if (!holidayTransactions.length) return [];
-
-    // Sort by date
-    const sorted = [...holidayTransactions].sort(
-      (a, b) => new Date(a.transaction_date) - new Date(b.transaction_date)
-    );
-
-    // Build data points with step-down effect
-    const dataPoints = [];
-    sorted.forEach((t, idx) => {
-      // For "used" transactions, show a vertical drop (step down)
-      if (t.type === "used" && idx > 0) {
-        // Add point at same x but previous y to create step
-        const prevBalance = idx > 0 ? sorted[idx - 1].balance_after : t.balance_after + t.hours;
-        dataPoints.push({
-          x: t.transaction_date,
-          y: prevBalance,
-          description: "",
-        });
-      }
-      dataPoints.push({
-        x: t.transaction_date,
-        y: t.balance_after,
-        description: t.description || "",
-      });
-    });
-
-    return [
-      {
-        id: "Vakantie-uren",
-        color: colors.taupeAccent[500],
-        data: dataPoints,
-      },
-    ];
-  }, [holidayTransactions, colors.taupeAccent]);
-
-  // X-axis tick values
-  const xTicks = useMemo(() => {
-    return chartData[0]?.data.map((d) => d.x) || [];
-  }, [chartData]);
 
   if (loading) {
     return (
@@ -483,15 +552,6 @@ const Medewerkers = () => {
                   </Select>
                 </FormControl>
                 <TextField
-                  label="Uren per week"
-                  type="number"
-                  value={contractForm.hours_per_week}
-                  onChange={(e) => setContractForm({ ...contractForm, hours_per_week: e.target.value })}
-                  required
-                  inputProps={{ step: "0.5", min: "0" }}
-                  sx={inputStyles}
-                />
-                <TextField
                   label="Bruto uurloon (€)"
                   type="number"
                   value={contractForm.hourly_rate}
@@ -518,22 +578,107 @@ const Medewerkers = () => {
                   inputProps={{ step: "0.1", min: "0", max: "100" }}
                   sx={inputStyles}
                 />
-                <Box display="flex" alignItems="center">
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    startIcon={<SaveOutlinedIcon />}
+              </Box>
+
+              {/* Werkrooster Section */}
+              <Box sx={{ mt: 4 }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                  <Typography variant="h5" fontWeight="600" color={tableColors.cells.text}>
+                    Werkrooster
+                  </Typography>
+                  <Box
                     sx={{
-                      backgroundColor: colors.taupeAccent[500],
-                      color: "white",
-                      px: 4,
-                      py: 1.5,
-                      "&:hover": { backgroundColor: colors.taupeAccent[600] },
+                      backgroundColor: isDarkMode ? colors.taupeAccent[600] : colors.taupeAccent[200],
+                      px: 2,
+                      py: 0.75,
+                      borderRadius: "8px",
                     }}
                   >
-                    Opslaan
-                  </Button>
+                    <Typography variant="body2" fontWeight="600" color={colors.primary[900]}>
+                      Totaal: {calculatedHoursPerWeek} uur/week
+                    </Typography>
+                  </Box>
                 </Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1.5,
+                    justifyContent: "space-between",
+                  }}
+                >
+                  {[
+                    { key: "monday_hours", label: "Ma" },
+                    { key: "tuesday_hours", label: "Di" },
+                    { key: "wednesday_hours", label: "Wo" },
+                    { key: "thursday_hours", label: "Do" },
+                    { key: "friday_hours", label: "Vr" },
+                    { key: "saturday_hours", label: "Za" },
+                    { key: "sunday_hours", label: "Zo" },
+                  ].map((day) => (
+                    <Box
+                      key={day.key}
+                      sx={{
+                        flex: 1,
+                        textAlign: "center",
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        fontWeight="600"
+                        color={tableColors.cells.text}
+                        sx={{ mb: 1 }}
+                      >
+                        {day.label}
+                      </Typography>
+                      <TextField
+                        type="number"
+                        value={werkrooster[day.key]}
+                        onChange={(e) =>
+                          setWerkrooster((prev) => ({
+                            ...prev,
+                            [day.key]: e.target.value,
+                          }))
+                        }
+                        inputProps={{
+                          min: 0,
+                          max: 24,
+                          step: 0.5,
+                          style: { textAlign: "center", padding: "12px 8px" },
+                        }}
+                        sx={{
+                          width: "100%",
+                          ...inputStyles,
+                          "& .MuiOutlinedInput-root": {
+                            ...inputStyles["& .MuiOutlinedInput-root"],
+                            backgroundColor:
+                              parseFloat(werkrooster[day.key]) > 0
+                                ? isDarkMode
+                                  ? colors.taupeAccent[700]
+                                  : colors.taupeAccent[100]
+                                : "transparent",
+                          },
+                        }}
+                      />
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+
+              <Box display="flex" justifyContent="flex-end" mt={3}>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  startIcon={<SaveOutlinedIcon />}
+                  sx={{
+                    backgroundColor: colors.taupeAccent[500],
+                    color: "white",
+                    px: 4,
+                    py: 1.5,
+                    "&:hover": { backgroundColor: colors.taupeAccent[600] },
+                  }}
+                >
+                  Opslaan
+                </Button>
               </Box>
             </Box>
           </Box>
@@ -600,9 +745,35 @@ const Medewerkers = () => {
                   <TableCell>Periode</TableCell>
                   <TableCell>Dienstverband</TableCell>
                   <TableCell>Uren/week</TableCell>
+                  <TableCell sx={{ px: 1 }}>
+                    <Box sx={{ textAlign: "center" }}>
+                      <Typography variant="body2" fontWeight="bold" sx={{ mb: 0.5 }}>
+                        Werkrooster
+                      </Typography>
+                      <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
+                        {["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"].map((day) => (
+                          <Typography
+                            key={day}
+                            variant="caption"
+                            sx={{
+                              width: 22,
+                              textAlign: "center",
+                              fontSize: "10px",
+                              fontWeight: 500,
+                              color: tableColors.header.text,
+                              opacity: 0.8,
+                            }}
+                          >
+                            {day}
+                          </Typography>
+                        ))}
+                      </Box>
+                    </Box>
+                  </TableCell>
                   <TableCell>Bruto uurloon</TableCell>
                   <TableCell>Vakantietoeslag</TableCell>
                   <TableCell>Bonus</TableCell>
+                  <TableCell sx={{ width: 60, textAlign: "center" }}></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody
@@ -631,14 +802,79 @@ const Medewerkers = () => {
                     </TableCell>
                     <TableCell>{capitalize(contract.dienstverband)}</TableCell>
                     <TableCell>{contract.hours_per_week} uur</TableCell>
+                    <TableCell sx={{ px: 1 }}>
+                      <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
+                        {[
+                          contract.monday_hours,
+                          contract.tuesday_hours,
+                          contract.wednesday_hours,
+                          contract.thursday_hours,
+                          contract.friday_hours,
+                          contract.saturday_hours,
+                          contract.sunday_hours,
+                        ].map((hours, i) => (
+                          <Box
+                            key={i}
+                            sx={{
+                              width: 22,
+                              height: 22,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: "4px",
+                              backgroundColor:
+                                hours > 0
+                                  ? isDarkMode
+                                    ? colors.taupeAccent[600]
+                                    : colors.taupeAccent[200]
+                                  : "transparent",
+                              border: hours > 0 ? "none" : `1px solid ${colors.primary[300]}`,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontSize: "10px",
+                                fontWeight: hours > 0 ? 600 : 400,
+                                color: hours > 0
+                                  ? isDarkMode
+                                    ? colors.primary[900]   // ← DARK MODE: hours > 0
+                                    : colors.primary[900]   // ← LIGHT MODE: hours > 0
+                                  : isDarkMode
+                                    ? colors.primary[700]   // ← DARK MODE: hours = 0
+                                    : colors.primary[400],  // ← LIGHT MODE: hours = 0
+                              }}
+                            >
+                              {hours ?? 0}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </TableCell>
                     <TableCell>{formatCurrency(contract.hourly_rate)}</TableCell>
                     <TableCell>{formatPercentage(contract.vakantietoeslag_percentage)}</TableCell>
                     <TableCell>{formatPercentage(contract.bonus_percentage)}</TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      <IconButton
+                        size="small"
+                        onClick={() => setDeleteDialog({ open: true, contract })}
+                        sx={{
+                          color: colors.redAccent[400],
+                          "&:hover": {
+                            backgroundColor: colors.redAccent[100],
+                            color: colors.redAccent[600],
+                          },
+                        }}
+                        title="Contract verwijderen"
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
                 ))}
                 {contractHistory.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} sx={{ textAlign: "center", py: 4 }}>
+                    <TableCell colSpan={8} sx={{ textAlign: "center", py: 4 }}>
                       Geen contract geschiedenis gevonden
                     </TableCell>
                   </TableRow>
@@ -649,76 +885,8 @@ const Medewerkers = () => {
 
           <Divider sx={{ my: 4 }} />
 
-          {/* Section 3: Holiday Hours */}
-          <Typography variant="h4" fontWeight="600" color={tableColors.cells.text} mb={2}>
-            Vakantie-uren Overzicht
-          </Typography>
-
-          {/* Holiday Hours Table */}
-          <TableContainer
-            component={Paper}
-            sx={{
-              backgroundColor: tableColors.container.background,
-              borderRadius: "12px",
-              boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-              overflow: "hidden",
-              mb: 4,
-            }}
-          >
-            <Table>
-              <TableHead>
-                <TableRow
-                  sx={{
-                    backgroundColor: tableColors.header.background,
-                    "& th:first-of-type": { borderTopLeftRadius: "12px", pl: 3 },
-                    "& th:last-of-type": { borderTopRightRadius: "12px" },
-                    "& th": {
-                      fontWeight: "bold",
-                      color: tableColors.header.text,
-                      fontSize: "14px",
-                      borderBottom: `2px solid ${colors.taupeAccent[300]}`,
-                      py: 2.5,
-                    },
-                  }}
-                >
-                  <TableCell>Jaar</TableCell>
-                  <TableCell>Beschikbaar</TableCell>
-                  <TableCell>Gebruikt</TableCell>
-                  <TableCell>Resterend</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody
-                sx={{
-                  "& tr:last-of-type td:first-of-type": { borderBottomLeftRadius: "12px" },
-                  "& tr:last-of-type td:last-of-type": { borderBottomRightRadius: "12px" },
-                }}
-              >
-                {holidayData.map((holiday, idx) => (
-                  <TableRow
-                    key={holiday.id || idx}
-                    sx={{
-                      "&:nth-of-type(odd)": { backgroundColor: tableColors.cells.backgroundOdd },
-                      "&:nth-of-type(even)": { backgroundColor: tableColors.cells.backgroundEven },
-                      "&:hover": { backgroundColor: tableColors.cells.backgroundHover },
-                      "& td": {
-                        borderBottom: `1px solid ${colors.primary[200]}`,
-                        py: 2,
-                        color: tableColors.cells.text,
-                      },
-                      "& td:first-of-type": { pl: 3 },
-                    }}
-                  >
-                    <TableCell>{holiday.year}</TableCell>
-                    <TableCell>{holiday.available_hours} uur</TableCell>
-                    <TableCell>{holiday.used_hours} uur</TableCell>
-                    <TableCell fontWeight="600">
-                      {(holiday.available_hours - holiday.used_hours).toFixed(1)} uur
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          {/* Section 3: Holiday Hours - Using shared component */}
+          <HolidayOverviewTable holidayData={holidayData} />
 
           {/* Add Hours Form */}
           <Box
@@ -798,7 +966,7 @@ const Medewerkers = () => {
                 value={addHoursForm.hours}
                 onChange={(e) => setAddHoursForm({ ...addHoursForm, hours: e.target.value })}
                 required
-                inputProps={{ step: "0.5", min: "0" }}
+                inputProps={{ step: "0.5" }}
                 sx={{ ...inputStyles, width: 120 }}
               />
               <TextField
@@ -826,103 +994,230 @@ const Medewerkers = () => {
             </Box>
           </Box>
 
-          {/* Line Chart */}
-          {chartData.length > 0 && chartData[0].data.length > 0 && (
+          {/* Line Chart - Using shared component */}
+          <HolidayChart holidayTransactions={holidayTransactions} />
+
+          {/* Transaction History */}
+          {holidayTransactions.length > 0 && (
             <Box
               sx={{
                 backgroundColor: tableColors.container.background,
                 p: 3,
                 borderRadius: "12px",
                 boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-                height: 350,
+                mb: 4,
               }}
             >
               <Typography variant="h5" fontWeight="600" color={tableColors.cells.text} mb={2}>
-                Vakantie-uren Verloop
+                Transactie Geschiedenis
               </Typography>
-              <Box sx={{ height: 280 }}>
-                <ResponsiveLine
-                  data={chartData}
-                  margin={{ top: 10, right: 60, bottom: 50, left: 40 }}
-                  xScale={{ type: "point" }}
-                  yScale={{ type: "linear", min: 0, max: "auto" }}
-                  curve="stepAfter"
-                  enableArea={true}
-                  areaOpacity={0.15}
-                  colors={[colors.taupeAccent[500]]}
-                  lineWidth={2}
-                  pointSize={6}
-                  pointColor={colors.taupeAccent[500]}
-                  pointBorderWidth={2}
-                  pointBorderColor={{ from: "serieColor" }}
-                  useMesh={true}
-                  axisTop={null}
-                  axisRight={null}
-                  axisBottom={{
-                    format: (value) => formatTimeLabel(value),
-                    tickRotation: 0,
-                    tickSize: 5,
-                    tickPadding: 5,
-                    tickValues: (() => {
-                      const arr = xTicks.filter((t) => t != null);
-                      if (!arr.length) return [];
-                      const last = arr.length - 1;
-                      if (last === 0) return [arr[0]];
-                      const i2 = Math.floor(last / 3);
-                      const i3 = Math.floor((2 * last) / 3);
-                      return [arr[0], arr[i2], arr[i3], arr[last]].filter((t) => t != null);
-                    })(),
-                  }}
-                  axisLeft={{
-                    tickValues: 5,
-                    tickSize: 5,
-                    tickPadding: 5,
-                    tickRotation: 0,
-                    legend: "Uren",
-                    legendOffset: -35,
-                    legendPosition: "middle",
-                  }}
-                  theme={chartTheme}
-                  enableGridX={false}
-                  enableGridY={false}
-                  tooltip={({ point }) => {
-                    if (!point) return null;
-                    return (
-                      <Box
-                        sx={{
-                          background: isDarkMode ? colors.primary[400] : colors.primary[100],
-                          padding: "12px 16px",
-                          borderRadius: "4px",
-                          border: `1px solid ${colors.taupeAccent[500]}`,
-                          minWidth: "260px",
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          sx={{ color: isDarkMode ? "#eee" : "#111", fontWeight: "bold", mb: 0.5 }}
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow
+                      sx={{
+                        backgroundColor: tableColors.header.background,
+                        "& th": {
+                          fontWeight: "bold",
+                          color: tableColors.header.text,
+                          fontSize: "13px",
+                          borderBottom: `2px solid ${colors.taupeAccent[300]}`,
+                          py: 1.5,
+                        },
+                      }}
+                    >
+                      <TableCell>Datum</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Uren</TableCell>
+                      <TableCell>Beschrijving</TableCell>
+                      <TableCell>Saldo na</TableCell>
+                      <TableCell sx={{ width: 50 }}></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {[...holidayTransactions]
+                      .sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date))
+                      .map((t) => (
+                        <TableRow
+                          key={t.id}
+                          sx={{
+                            "&:nth-of-type(odd)": { backgroundColor: tableColors.cells.backgroundOdd },
+                            "&:nth-of-type(even)": { backgroundColor: tableColors.cells.backgroundEven },
+                            "&:hover": { backgroundColor: tableColors.cells.backgroundHover },
+                            "& td": {
+                              borderBottom: `1px solid ${colors.primary[200]}`,
+                              py: 1,
+                              color: tableColors.cells.text,
+                              fontSize: "13px",
+                            },
+                          }}
                         >
-                          Vakantie-uren
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: isDarkMode ? "#eee" : "#111" }}>
-                          Datum: {formatTimeLabel(point.data.x)}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: isDarkMode ? "#eee" : "#111" }}>
-                          Saldo: {Number(point.data.y).toFixed(1)} uur
-                        </Typography>
-                        {point.data.description && (
-                          <Typography variant="body2" sx={{ color: isDarkMode ? "#eee" : "#111" }}>
-                            Beschrijving: {point.data.description}
-                          </Typography>
-                        )}
-                      </Box>
-                    );
-                  }}
-                />
-              </Box>
+                          <TableCell>
+                            {new Date(t.transaction_date).toLocaleDateString("nl-NL", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </TableCell>
+                          <TableCell>
+                            <Box
+                              sx={{
+                                display: "inline-block",
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: "4px",
+                                backgroundColor: t.type === "added" 
+                                  ? (isDarkMode ? colors.greenAccent[500] : colors.greenAccent[100])
+                                  : (isDarkMode ? colors.redAccent[500] : colors.redAccent[100]),
+                                color: t.type === "added"
+                                  ? (isDarkMode ? colors.primary[800] : colors.greenAccent[700])
+                                  : (isDarkMode ? colors.primary[800] : colors.redAccent[700]),
+                                fontSize: "11px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {t.type === "added" ? "Toegevoegd" : "Gebruikt"}
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Typography
+                              component="span"
+                              sx={{
+                                fontWeight: 600,
+                                color: (t.type === "added" && t.hours >= 0) || (t.type === "used" && t.hours < 0)
+                                  ? colors.greenAccent[500] 
+                                  : colors.redAccent[500],
+                              }}
+                            >
+                              {t.type === "added" 
+                                ? (t.hours >= 0 ? `+${t.hours}` : t.hours)
+                                : (t.hours >= 0 ? `-${t.hours}` : `+${Math.abs(t.hours)}`)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{t.description || "-"}</TableCell>
+                          <TableCell>{t.balance_after} uur</TableCell>
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              onClick={() => setDeleteTransactionDialog({ open: true, transaction: t })}
+                              sx={{
+                                color: colors.redAccent[400],
+                                "&:hover": {
+                                  backgroundColor: colors.redAccent[100],
+                                  color: colors.redAccent[600],
+                                },
+                              }}
+                              title="Transactie verwijderen"
+                            >
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Box>
           )}
         </>
       )}
+
+      {/* Delete Contract Confirmation Dialog */}
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, contract: null })}
+      >
+        <DialogTitle sx={{ fontWeight: "bold", color: colors.redAccent[500] }}>
+          Contract verwijderen
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Weet u zeker dat u het contract van{" "}
+            <strong>
+              {deleteDialog.contract
+                ? `${getMonthName(deleteDialog.contract.month)} ${deleteDialog.contract.year}`
+                : ""}
+            </strong>{" "}
+            wilt verwijderen?
+            <br />
+            <strong>Let op: Dit kan niet ongedaan worden gemaakt!</strong>
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteDialog({ open: false, contract: null })}
+            sx={{
+              color: colors.grey[600],
+              "&:hover": { backgroundColor: colors.grey[200] },
+            }}
+          >
+            Annuleren
+          </Button>
+          <Button
+            onClick={handleDeleteContract}
+            sx={{
+              color: colors.redAccent[500],
+              "&:hover": { backgroundColor: colors.redAccent[100] },
+            }}
+          >
+            Verwijderen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Transaction Confirmation Dialog */}
+      <Dialog
+        open={deleteTransactionDialog.open}
+        onClose={() => setDeleteTransactionDialog({ open: false, transaction: null })}
+      >
+        <DialogTitle sx={{ fontWeight: "bold", color: colors.redAccent[500] }}>
+          Transactie verwijderen
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Weet u zeker dat u deze transactie wilt verwijderen?
+            {deleteTransactionDialog.transaction && (
+              <>
+                <br /><br />
+                <strong>Datum:</strong>{" "}
+                {new Date(deleteTransactionDialog.transaction.transaction_date).toLocaleDateString("nl-NL")}
+                <br />
+                <strong>Type:</strong>{" "}
+                {deleteTransactionDialog.transaction.type === "added" ? "Toegevoegd" : "Gebruikt"}
+                <br />
+                <strong>Uren:</strong>{" "}
+                {deleteTransactionDialog.transaction.type === "added" ? "+" : "-"}
+                {deleteTransactionDialog.transaction.hours}
+                <br />
+                <strong>Beschrijving:</strong>{" "}
+                {deleteTransactionDialog.transaction.description || "-"}
+              </>
+            )}
+            <br /><br />
+            <strong>Let op:</strong> Alle saldo's na deze transactie worden automatisch herberekend.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteTransactionDialog({ open: false, transaction: null })}
+            sx={{
+              color: colors.grey[600],
+              "&:hover": { backgroundColor: colors.grey[200] },
+            }}
+          >
+            Annuleren
+          </Button>
+          <Button
+            onClick={handleDeleteTransaction}
+            sx={{
+              color: colors.redAccent[500],
+              "&:hover": { backgroundColor: colors.redAccent[100] },
+            }}
+          >
+            Verwijderen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

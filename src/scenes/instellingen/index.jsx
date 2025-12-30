@@ -35,6 +35,8 @@ import PersonOutlinedIcon from "@mui/icons-material/PersonOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 
 const Instellingen = () => {
   const theme = useTheme();
@@ -53,12 +55,25 @@ const Instellingen = () => {
     password: "",
     role: "employee",
     dienstverband: "tijdelijk",
-    hours_per_week: "",
     hourly_rate: "",
     vakantietoeslag_percentage: "8",
     bonus_percentage: "0",
     available_hours: "",
   });
+
+  // Werkrooster state (separate for cleaner handling)
+  const [werkrooster, setWerkrooster] = useState({
+    monday_hours: 0,
+    tuesday_hours: 0,
+    wednesday_hours: 0,
+    thursday_hours: 0,
+    friday_hours: 0,
+    saturday_hours: 0,
+    sunday_hours: 0,
+  });
+
+  // Calculate total hours per week from werkrooster
+  const calculatedHoursPerWeek = Object.values(werkrooster).reduce((sum, h) => sum + (parseFloat(h) || 0), 0);
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
@@ -71,6 +86,18 @@ const Instellingen = () => {
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+
+  // Edit user state
+  const [selectedEditUser, setSelectedEditUser] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "employee",
+  });
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [editFormError, setEditFormError] = useState("");
+  const [editFormSuccess, setEditFormSuccess] = useState("");
 
   // ============================================
   // TABLE COLOR CONFIGURATION
@@ -169,6 +196,34 @@ const Instellingen = () => {
     }
   }, [formError]);
 
+  // Auto-dismiss edit form messages
+  useEffect(() => {
+    if (editFormSuccess) {
+      const timer = setTimeout(() => setEditFormSuccess(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [editFormSuccess]);
+
+  useEffect(() => {
+    if (editFormError) {
+      const timer = setTimeout(() => setEditFormError(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [editFormError]);
+
+  // Populate edit form when user is selected
+  useEffect(() => {
+    if (selectedEditUser) {
+      setEditFormData({
+        name: selectedEditUser.name || "",
+        email: selectedEditUser.email || "",
+        password: "", // Don't prefill password for security
+        role: selectedEditUser.role || "employee",
+      });
+      setShowEditPassword(false);
+    }
+  }, [selectedEditUser]);
+
   // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -189,8 +244,12 @@ const Instellingen = () => {
 
     // For employees, validate contract fields
     if (formData.role === "employee") {
-      if (!formData.hours_per_week || !formData.hourly_rate || !formData.available_hours) {
+      if (!formData.hourly_rate || !formData.available_hours) {
         setFormError("Vul alle contract- en vakantiegegevens in voor medewerkers");
+        return;
+      }
+      if (calculatedHoursPerWeek === 0) {
+        setFormError("Vul minimaal één werkdag in voor het werkrooster");
         return;
       }
     }
@@ -201,11 +260,20 @@ const Instellingen = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          hours_per_week: parseFloat(formData.hours_per_week),
+          hours_per_week: calculatedHoursPerWeek,
           hourly_rate: parseFloat(formData.hourly_rate),
           vakantietoeslag_percentage: parseFloat(formData.vakantietoeslag_percentage),
           bonus_percentage: parseFloat(formData.bonus_percentage),
           available_hours: parseFloat(formData.available_hours),
+          werkrooster: formData.role === "employee" ? {
+            monday_hours: parseFloat(werkrooster.monday_hours) || 0,
+            tuesday_hours: parseFloat(werkrooster.tuesday_hours) || 0,
+            wednesday_hours: parseFloat(werkrooster.wednesday_hours) || 0,
+            thursday_hours: parseFloat(werkrooster.thursday_hours) || 0,
+            friday_hours: parseFloat(werkrooster.friday_hours) || 0,
+            saturday_hours: parseFloat(werkrooster.saturday_hours) || 0,
+            sunday_hours: parseFloat(werkrooster.sunday_hours) || 0,
+          } : null,
         }),
       });
 
@@ -221,11 +289,19 @@ const Instellingen = () => {
         password: "",
         role: "employee",
         dienstverband: "tijdelijk",
-        hours_per_week: "",
         hourly_rate: "",
         vakantietoeslag_percentage: "8",
         bonus_percentage: "0",
         available_hours: "",
+      });
+      setWerkrooster({
+        monday_hours: 0,
+        tuesday_hours: 0,
+        wednesday_hours: 0,
+        thursday_hours: 0,
+        friday_hours: 0,
+        saturday_hours: 0,
+        sunday_hours: 0,
       });
       fetchUsers();
     } catch (err) {
@@ -278,6 +354,60 @@ const Instellingen = () => {
       setSnackbar({ open: true, message: err.message, severity: "error" });
     } finally {
       setRemoveDialog({ open: false, user: null });
+    }
+  };
+
+  // Handle edit user submit
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setEditFormError("");
+    setEditFormSuccess("");
+
+    if (!selectedEditUser) {
+      setEditFormError("Selecteer eerst een gebruiker");
+      return;
+    }
+
+    if (!editFormData.name || !editFormData.email) {
+      setEditFormError("Naam en e-mailadres zijn verplicht");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `http://localhost:5001/api/users/${selectedEditUser.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: editFormData.name,
+            email: editFormData.email,
+            password: editFormData.password || undefined, // Only update if provided
+            role: editFormData.role,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Fout bij bijwerken gebruiker");
+      }
+
+      setEditFormSuccess("Gebruiker succesvol bijgewerkt");
+      fetchUsers();
+      
+      // Update the selected user in the dropdown
+      const updatedUser = users.find(u => u.id === selectedEditUser.id);
+      if (updatedUser) {
+        setSelectedEditUser({
+          ...updatedUser,
+          name: editFormData.name,
+          email: editFormData.email,
+          role: editFormData.role,
+        });
+      }
+    } catch (err) {
+      setEditFormError(err.message);
     }
   };
 
@@ -437,17 +567,6 @@ const Instellingen = () => {
                 </Select>
               </FormControl>
               <TextField
-                name="hours_per_week"
-                label="Uren per week"
-                type="number"
-                value={formData.hours_per_week}
-                onChange={handleInputChange}
-                required
-                fullWidth
-                sx={inputStyles}
-                inputProps={{ step: "0.5", min: "0" }}
-              />
-              <TextField
                 name="hourly_rate"
                 label="Bruto uurloon (€)"
                 type="number"
@@ -489,6 +608,90 @@ const Instellingen = () => {
                 fullWidth
                 inputProps={{ step: "1", min: "0" }}
               />
+            </Box>
+
+            {/* Werkrooster Section */}
+            <Box sx={{ mt: 4 }}>
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="h5" fontWeight="600" color={tableColors.cells.text}>
+                  Werkrooster
+                </Typography>
+                <Box
+                  sx={{
+                    backgroundColor: isDarkMode ? colors.taupeAccent[600] : colors.taupeAccent[200],
+                    px: 2,
+                    py: 0.75,
+                    borderRadius: "8px",
+                  }}
+                >
+                  <Typography variant="body2" fontWeight="600" color={colors.primary[900]}>
+                    Totaal: {calculatedHoursPerWeek} uur/week
+                  </Typography>
+                </Box>
+              </Box>
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 1.5,
+                  justifyContent: "space-between",
+                }}
+              >
+                {[
+                  { key: "monday_hours", label: "Ma" },
+                  { key: "tuesday_hours", label: "Di" },
+                  { key: "wednesday_hours", label: "Wo" },
+                  { key: "thursday_hours", label: "Do" },
+                  { key: "friday_hours", label: "Vr" },
+                  { key: "saturday_hours", label: "Za" },
+                  { key: "sunday_hours", label: "Zo" },
+                ].map((day) => (
+                  <Box
+                    key={day.key}
+                    sx={{
+                      flex: 1,
+                      textAlign: "center",
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      fontWeight="600"
+                      color={tableColors.cells.text}
+                      sx={{ mb: 1 }}
+                    >
+                      {day.label}
+                    </Typography>
+                    <TextField
+                      type="number"
+                      value={werkrooster[day.key]}
+                      onChange={(e) =>
+                        setWerkrooster((prev) => ({
+                          ...prev,
+                          [day.key]: e.target.value,
+                        }))
+                      }
+                      inputProps={{
+                        min: 0,
+                        max: 24,
+                        step: 0.5,
+                        style: { textAlign: "center", padding: "12px 8px" },
+                      }}
+                      sx={{
+                        width: "100%",
+                        ...inputStyles,
+                        "& .MuiOutlinedInput-root": {
+                          ...inputStyles["& .MuiOutlinedInput-root"],
+                          backgroundColor:
+                            parseFloat(werkrooster[day.key]) > 0
+                              ? isDarkMode
+                                ? colors.taupeAccent[700]
+                                : colors.taupeAccent[100]
+                              : "transparent",
+                        },
+                      }}
+                    />
+                  </Box>
+                ))}
+              </Box>
             </Box>
           </>
         )}
@@ -536,6 +739,159 @@ const Instellingen = () => {
               }}
             >
               {formError}
+            </Alert>
+          )}
+        </Box>
+      </Box>
+
+      {/* Edit User Form */}
+      <Box
+        component="form"
+        onSubmit={handleEditSubmit}
+        sx={{
+          mt: 5,
+          p: 4,
+          backgroundColor: tableColors.container.background,
+          borderRadius: "12px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+        }}
+      >
+        <Box display="flex" alignItems="center" gap={1} mb={3}>
+          <EditOutlinedIcon sx={{ color: colors.taupeAccent[500], fontSize: 28 }} />
+          <Typography variant="h4" fontWeight="600" color={tableColors.cells.text}>
+            Gebruiker Aanpassen
+          </Typography>
+        </Box>
+
+        {/* User Selector */}
+        <FormControl fullWidth sx={{ ...inputStyles, mb: 3 }}>
+          <InputLabel>Selecteer gebruiker</InputLabel>
+          <Select
+            value={selectedEditUser?.id || ""}
+            onChange={(e) => {
+              const user = users.find((u) => u.id === e.target.value);
+              setSelectedEditUser(user);
+              setEditFormError("");
+              setEditFormSuccess("");
+            }}
+            label="Selecteer gebruiker"
+          >
+            {users.map((user) => (
+              <MenuItem key={user.id} value={user.id}>
+                {user.name} ({user.email})
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {selectedEditUser && (
+          <>
+            <Divider sx={{ mb: 3 }} />
+            <Box display="grid" gridTemplateColumns="repeat(2, 1fr)" gap={3}>
+              <TextField
+                label="Naam"
+                name="name"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                required
+                fullWidth
+                sx={inputStyles}
+              />
+              <TextField
+                label="E-mailadres"
+                name="email"
+                type="email"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                required
+                fullWidth
+                sx={inputStyles}
+              />
+              <TextField
+                label="Nieuw wachtwoord"
+                name="password"
+                type={showEditPassword ? "text" : "password"}
+                value={editFormData.password}
+                onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                fullWidth
+                placeholder="Laat leeg om niet te wijzigen"
+                sx={inputStyles}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowEditPassword(!showEditPassword)}
+                        edge="end"
+                        sx={{ color: colors.taupeAccent[500] }}
+                      >
+                        {showEditPassword ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <FormControl fullWidth sx={inputStyles}>
+                <InputLabel>Rol</InputLabel>
+                <Select
+                  name="role"
+                  value={editFormData.role}
+                  onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value })}
+                  label="Rol"
+                >
+                  <MenuItem value="employee">Medewerker</MenuItem>
+                  <MenuItem value="manager">Manager</MenuItem>
+                  <MenuItem value="admin">Beheerder</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
+            <Box display="flex" justifyContent="flex-end" mt={3}>
+              <Button
+                type="submit"
+                variant="contained"
+                startIcon={<SaveOutlinedIcon />}
+                sx={{
+                  backgroundColor: colors.taupeAccent[500],
+                  color: "white",
+                  px: 4,
+                  py: 1.5,
+                  "&:hover": { backgroundColor: colors.taupeAccent[600] },
+                }}
+              >
+                Opslaan
+              </Button>
+            </Box>
+          </>
+        )}
+
+        {/* Success/Error Messages */}
+        <Box mt={2}>
+          {editFormSuccess && (
+            <Alert
+              severity="success"
+              sx={{
+                backgroundColor: isDarkMode ? colors.greenAccent[400] : colors.greenAccent[100],
+                color: isDarkMode ? colors.primary[900] : colors.greenAccent[700],
+                "& .MuiAlert-icon": {
+                  color: isDarkMode ? colors.primary[900] : colors.greenAccent[700],
+                },
+              }}
+            >
+              {editFormSuccess}
+            </Alert>
+          )}
+          {editFormError && (
+            <Alert
+              severity="error"
+              sx={{
+                backgroundColor: isDarkMode ? colors.redAccent[400] : colors.redAccent[100],
+                color: isDarkMode ? colors.primary[900] : colors.redAccent[700],
+                "& .MuiAlert-icon": {
+                  color: isDarkMode ? colors.primary[900] : colors.redAccent[700],
+                },
+              }}
+            >
+              {editFormError}
             </Alert>
           )}
         </Box>
