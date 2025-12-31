@@ -5,7 +5,7 @@ services:
     runtime: node
     region: frankfurt  # EU region for Netherlands
     plan: starter      # Required for persistent disk ($7/month)
-    buildCommand: npm install && npm run build && cd server && npm install
+    buildCommand: npm install --legacy-peer-deps && npm run build && cd server && npm install
     startCommand: |
       # Copy database from repo to persistent disk if it doesn't exist yet
       if [ ! -f /var/data/database.sqlite ]; then

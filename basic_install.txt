@@ -15,7 +15,7 @@
 create:
     - cd server
     - npm install
-    - npm install
+    - npm run init-db
 remove:
     - rm database.sqlite
     - npm run init-db
