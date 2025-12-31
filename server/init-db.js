@@ -1,8 +1,16 @@
 const sqlite3 = require("sqlite3").verbose();
 const bcrypt = require("bcryptjs");
 const path = require("path");
+const fs = require("fs");
 
-const dbPath = path.join(__dirname, "database.sqlite");
+// Use environment variable for production, local path for development
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, "database.sqlite");
+
+// Ensure the directory exists (for persistent disk)
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 // Create database connection
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -17,6 +25,10 @@ const db = new sqlite3.Database(dbPath, (err) => {
 db.serialize(() => {
   // Enable foreign keys
   db.run("PRAGMA foreign_keys = ON");
+  // Enable WAL mode for better concurrency
+  db.run("PRAGMA journal_mode = WAL");
+  // Set busy timeout
+  db.run("PRAGMA busy_timeout = 5000");
 
   // Create users table
   db.run(

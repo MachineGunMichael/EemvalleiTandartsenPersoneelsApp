@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   Typography,
@@ -71,8 +72,8 @@ const Overuren = () => {
       try {
         setLoading(true);
         const [overtimeRes, transRes] = await Promise.all([
-          fetch(`http://localhost:5001/api/employees/${user.employee_id}/overtime`),
-          fetch(`http://localhost:5001/api/employees/${user.employee_id}/overtime-transactions`),
+          fetch(`${API_BASE_URL}/api/employees/${user.employee_id}/overtime`),
+          fetch(`${API_BASE_URL}/api/employees/${user.employee_id}/overtime-transactions`),
         ]);
 
         if (overtimeRes.ok) setOvertimeData(await overtimeRes.json());
@@ -124,7 +125,7 @@ const Overuren = () => {
     try {
       // Submit overtime REQUEST (pending approval)
       const response = await fetch(
-        `http://localhost:5001/api/overtime-requests`,
+        `${API_BASE_URL}/api/overtime-requests`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

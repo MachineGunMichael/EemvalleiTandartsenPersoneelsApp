@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   Typography,
@@ -161,7 +162,7 @@ const Instellingen = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:5001/api/users");
+      const response = await fetch(`${API_BASE_URL}/api/users`);
       if (!response.ok) throw new Error("Kon gebruikers niet ophalen");
       const data = await response.json();
       setUsers(data);
@@ -256,7 +257,7 @@ const Instellingen = () => {
     }
 
     try {
-      const response = await fetch("http://localhost:5001/api/users", {
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -317,7 +318,7 @@ const Instellingen = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/users/${deactivateDialog.user.id}/deactivate`,
+        `${API_BASE_URL}/api/users/${deactivateDialog.user.id}/deactivate`,
         { method: "PUT" }
       );
 
@@ -341,7 +342,7 @@ const Instellingen = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/users/${removeDialog.user.id}`,
+        `${API_BASE_URL}/api/users/${removeDialog.user.id}`,
         { method: "DELETE" }
       );
 
@@ -377,7 +378,7 @@ const Instellingen = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/users/${selectedEditUser.id}`,
+        `${API_BASE_URL}/api/users/${selectedEditUser.id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -417,7 +418,7 @@ const Instellingen = () => {
   const handleReactivate = async (userId) => {
     try {
       const response = await fetch(
-        `http://localhost:5001/api/users/${userId}/reactivate`,
+        `${API_BASE_URL}/api/users/${userId}/reactivate`,
         { method: "PUT" }
       );
 

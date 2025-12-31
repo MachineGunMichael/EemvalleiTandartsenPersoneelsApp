@@ -8,8 +8,8 @@ const multer = require("multer");
 const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 
-// Configure multer for file uploads
-const uploadsDir = path.join(__dirname, "uploads");
+// Configure multer for file uploads - use persistent disk in production
+const uploadsDir = process.env.UPLOADS_PATH || path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -40,8 +40,8 @@ const upload = multer({
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Database path
-const dbPath = path.join(__dirname, "database.sqlite");
+// Database path - use persistent disk in production
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, "database.sqlite");
 
 // Email configuration for SiteGround
 const EMAIL_CONFIG = {
@@ -126,6 +126,10 @@ const connectDB = () => {
         console.log("Connected to SQLite database.");
         // Enable foreign keys
         db.run("PRAGMA foreign_keys = ON");
+        // Enable WAL mode for better concurrency with multiple users
+        db.run("PRAGMA journal_mode = WAL");
+        // Set busy timeout to 5 seconds (wait instead of failing on lock)
+        db.run("PRAGMA busy_timeout = 5000");
         
         // Add positie column to employee_contracts if it doesn't exist
         db.all("PRAGMA table_info(employee_contracts)", (err, columns) => {
@@ -2201,6 +2205,20 @@ app.put("/api/overtime-requests/:id/reject", (req, res) => {
   );
 });
 
+// Serve static files in production
+if (process.env.NODE_ENV === "production") {
+  const buildPath = path.join(__dirname, "..", "build");
+  app.use(express.static(buildPath));
+  
+  // Handle React routing - serve index.html for all non-API routes
+  app.get("*", (req, res) => {
+    // Don't serve index.html for API routes
+    if (!req.path.startsWith("/api/")) {
+      res.sendFile(path.join(buildPath, "index.html"));
+    }
+  });
+}
+
 // Start server
 const startServer = async () => {
   try {
@@ -2209,21 +2227,24 @@ const startServer = async () => {
       console.log("");
       console.log("=".repeat(50));
       console.log(`SERVER RUNNING ON PORT ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
       console.log("=".repeat(50));
       console.log("");
-      console.log("Available endpoints:");
-      console.log(`  GET  http://localhost:${PORT}/api/health`);
-      console.log(`  POST http://localhost:${PORT}/api/login`);
-      console.log(`  GET  http://localhost:${PORT}/api/users`);
-      console.log(`  POST http://localhost:${PORT}/api/users`);
-      console.log(`  GET  http://localhost:${PORT}/api/employees`);
-      console.log(`  GET  http://localhost:${PORT}/api/employees/:id`);
-      console.log(`  GET  http://localhost:${PORT}/api/employees/user/:userId`);
-      console.log(`  GET  http://localhost:${PORT}/api/employees/:id/contracts`);
-      console.log(`  PUT  http://localhost:${PORT}/api/employees/:id/contracts`);
-      console.log(`  GET  http://localhost:${PORT}/api/employees/:id/holidays`);
-      console.log(`  PUT  http://localhost:${PORT}/api/employees/:id/holidays`);
-      console.log("");
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Available endpoints:");
+        console.log(`  GET  http://localhost:${PORT}/api/health`);
+        console.log(`  POST http://localhost:${PORT}/api/login`);
+        console.log(`  GET  http://localhost:${PORT}/api/users`);
+        console.log(`  POST http://localhost:${PORT}/api/users`);
+        console.log(`  GET  http://localhost:${PORT}/api/employees`);
+        console.log(`  GET  http://localhost:${PORT}/api/employees/:id`);
+        console.log(`  GET  http://localhost:${PORT}/api/employees/user/:userId`);
+        console.log(`  GET  http://localhost:${PORT}/api/employees/:id/contracts`);
+        console.log(`  PUT  http://localhost:${PORT}/api/employees/:id/contracts`);
+        console.log(`  GET  http://localhost:${PORT}/api/employees/:id/holidays`);
+        console.log(`  PUT  http://localhost:${PORT}/api/employees/:id/holidays`);
+        console.log("");
+      }
     });
   } catch (err) {
     console.error("Failed to start server:", err.message);

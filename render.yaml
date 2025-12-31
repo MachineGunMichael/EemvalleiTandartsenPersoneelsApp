@@ -1,0 +1,31 @@
+services:
+  # Combined Frontend + Backend Service
+  - type: web
+    name: personeel-app
+    runtime: node
+    region: frankfurt  # EU region for Netherlands
+    plan: starter      # Required for persistent disk ($7/month)
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: |
+      # Copy database from repo to persistent disk if it doesn't exist yet
+      if [ ! -f /var/data/database.sqlite ]; then
+        echo "Copying initial database to persistent disk..."
+        mkdir -p /var/data
+        cp server/database.sqlite /var/data/database.sqlite
+        mkdir -p /var/data/uploads
+        cp -r server/uploads/* /var/data/uploads/ 2>/dev/null || true
+      fi
+      cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /var/data/database.sqlite
+      - key: UPLOADS_PATH
+        value: /var/data/uploads
+      - key: PORT
+        value: 10000
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1  # 1GB included with Starter plan

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   Typography,
@@ -218,11 +219,11 @@ const Dashboard = () => {
         setLoading(true);
         setError(null);
 
-        let url = "http://localhost:5001/api/employees";
+        let url = `${API_BASE_URL}/api/employees`;
         
         // If employee, only fetch their own data
         if (currentRole === "employee" && user?.id) {
-          url = `http://localhost:5001/api/employees/user/${user.id}`;
+          url = `${API_BASE_URL}/api/employees/user/${user.id}`;
         }
 
         const response = await fetch(url);
@@ -259,7 +260,7 @@ const Dashboard = () => {
       
       try {
         const response = await fetch(
-          `http://localhost:5001/api/employees/${user.employee_id}/contract-history`
+          `${API_BASE_URL}/api/employees/${user.employee_id}/contract-history`
         );
         if (response.ok) {
           const data = await response.json();
@@ -281,7 +282,7 @@ const Dashboard = () => {
         const allTransactions = [];
         for (const emp of employees) {
           const response = await fetch(
-            `http://localhost:5001/api/employees/${emp.employee_id}/holiday-transactions`
+            `${API_BASE_URL}/api/employees/${emp.employee_id}/holiday-transactions`
           );
           if (response.ok) {
             const data = await response.json();

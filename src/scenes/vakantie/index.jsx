@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   Typography,
@@ -118,9 +119,9 @@ const Vakantie = () => {
       try {
         setLoading(true);
         const [holidayRes, transRes, scheduleRes] = await Promise.all([
-          fetch(`http://localhost:5001/api/employees/${user.employee_id}/holidays`),
-          fetch(`http://localhost:5001/api/employees/${user.employee_id}/holiday-transactions`),
-          fetch(`http://localhost:5001/api/employees/${user.employee_id}/work-schedule`),
+          fetch(`${API_BASE_URL}/api/employees/${user.employee_id}/holidays`),
+          fetch(`${API_BASE_URL}/api/employees/${user.employee_id}/holiday-transactions`),
+          fetch(`${API_BASE_URL}/api/employees/${user.employee_id}/work-schedule`),
         ]);
 
         if (holidayRes.ok) setHolidayData(await holidayRes.json());
@@ -186,7 +187,7 @@ const Vakantie = () => {
     try {
       // Submit vacation REQUEST (pending approval) instead of directly adding hours
       const response = await fetch(
-        `http://localhost:5001/api/vacation-requests`,
+        `${API_BASE_URL}/api/vacation-requests`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

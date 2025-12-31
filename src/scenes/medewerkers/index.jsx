@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   Typography,
@@ -180,7 +181,7 @@ const Medewerkers = () => {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch("http://localhost:5001/api/employees");
+        const response = await fetch(`${API_BASE_URL}/api/employees`);
         if (!response.ok) throw new Error("Kon medewerkers niet ophalen");
         const data = await response.json();
         setEmployees(data || []);
@@ -226,7 +227,7 @@ const Medewerkers = () => {
       try {
         // Fetch contract history
         const contractRes = await fetch(
-          `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/contract-history`
+          `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/contract-history`
         );
         if (contractRes.ok) {
           const contracts = await contractRes.json();
@@ -258,7 +259,7 @@ const Medewerkers = () => {
 
         // Fetch holiday data
         const holidayRes = await fetch(
-          `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holidays`
+          `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holidays`
         );
         if (holidayRes.ok) {
           const holidays = await holidayRes.json();
@@ -267,7 +268,7 @@ const Medewerkers = () => {
 
         // Fetch holiday transactions
         const transRes = await fetch(
-          `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holiday-transactions`
+          `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holiday-transactions`
         );
         if (transRes.ok) {
           const transactions = await transRes.json();
@@ -276,7 +277,7 @@ const Medewerkers = () => {
 
         // Fetch overtime data
         const overtimeRes = await fetch(
-          `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime`
+          `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime`
         );
         if (overtimeRes.ok) {
           const overtime = await overtimeRes.json();
@@ -285,7 +286,7 @@ const Medewerkers = () => {
 
         // Fetch overtime transactions
         const overtimeTransRes = await fetch(
-          `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-transactions`
+          `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime-transactions`
         );
         if (overtimeTransRes.ok) {
           const otTransactions = await overtimeTransRes.json();
@@ -320,7 +321,7 @@ const Medewerkers = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/contracts`,
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/contracts`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -354,7 +355,7 @@ const Medewerkers = () => {
       setFormSuccess("Contract wijziging opgeslagen");
       // Refresh contract history
       const refreshRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/contract-history`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/contract-history`
       );
       if (refreshRes.ok) {
         setContractHistory(await refreshRes.json());
@@ -375,7 +376,7 @@ const Medewerkers = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holiday-transactions`,
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holiday-transactions`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -400,12 +401,12 @@ const Medewerkers = () => {
 
       // Refresh data
       const holidayRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holidays`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holidays`
       );
       if (holidayRes.ok) setHolidayData(await holidayRes.json());
 
       const transRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holiday-transactions`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holiday-transactions`
       );
       if (transRes.ok) setHolidayTransactions(await transRes.json());
     } catch (err) {
@@ -419,7 +420,7 @@ const Medewerkers = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/contracts/${deleteDialog.contract.id}`,
+        `${API_BASE_URL}/api/contracts/${deleteDialog.contract.id}`,
         { method: "DELETE" }
       );
 
@@ -432,7 +433,7 @@ const Medewerkers = () => {
       
       // Refresh contract history
       const refreshRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/contract-history`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/contract-history`
       );
       if (refreshRes.ok) {
         const contracts = await refreshRes.json();
@@ -473,7 +474,7 @@ const Medewerkers = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/holiday-transactions/${deleteTransactionDialog.transaction.id}`,
+        `${API_BASE_URL}/api/holiday-transactions/${deleteTransactionDialog.transaction.id}`,
         { method: "DELETE" }
       );
 
@@ -486,12 +487,12 @@ const Medewerkers = () => {
       
       // Refresh holiday data and transactions
       const holidayRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holidays`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holidays`
       );
       if (holidayRes.ok) setHolidayData(await holidayRes.json());
 
       const transRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holiday-transactions`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holiday-transactions`
       );
       if (transRes.ok) setHolidayTransactions(await transRes.json());
     } catch (err) {
@@ -519,8 +520,8 @@ const Medewerkers = () => {
 
     try {
       const endpoint = overtimeActionForm.action === "convert" 
-        ? `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-to-vacation`
-        : `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-payout`;
+        ? `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime-to-vacation`
+        : `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime-payout`;
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -545,10 +546,10 @@ const Medewerkers = () => {
 
       // Refresh all data
       const [overtimeRes, overtimeTransRes, holidayRes, transRes] = await Promise.all([
-        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime`),
-        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-transactions`),
-        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holidays`),
-        fetch(`http://localhost:5001/api/employees/${selectedEmployee.employee_id}/holiday-transactions`),
+        fetch(`${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime`),
+        fetch(`${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime-transactions`),
+        fetch(`${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holidays`),
+        fetch(`${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/holiday-transactions`),
       ]);
 
       if (overtimeRes.ok) setOvertimeData(await overtimeRes.json());
@@ -566,7 +567,7 @@ const Medewerkers = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/overtime-transactions/${deleteOvertimeTransactionDialog.transaction.id}`,
+        `${API_BASE_URL}/api/overtime-transactions/${deleteOvertimeTransactionDialog.transaction.id}`,
         { method: "DELETE" }
       );
 
@@ -579,12 +580,12 @@ const Medewerkers = () => {
       
       // Refresh overtime data
       const overtimeRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime`
       );
       if (overtimeRes.ok) setOvertimeData(await overtimeRes.json());
 
       const overtimeTransRes = await fetch(
-        `http://localhost:5001/api/employees/${selectedEmployee.employee_id}/overtime-transactions`
+        `${API_BASE_URL}/api/employees/${selectedEmployee.employee_id}/overtime-transactions`
       );
       if (overtimeTransRes.ok) setOvertimeTransactions(await overtimeTransRes.json());
     } catch (err) {

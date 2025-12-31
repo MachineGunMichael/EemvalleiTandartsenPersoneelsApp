@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   Typography,
@@ -61,7 +62,7 @@ const Bestellingen = () => {
   // Fetch order items
   const fetchItems = async () => {
     try {
-      const response = await fetch("http://localhost:5001/api/orders");
+      const response = await fetch(`${API_BASE_URL}/api/orders`);
       if (response.ok) {
         const data = await response.json();
         setItems(data);
@@ -83,7 +84,7 @@ const Bestellingen = () => {
 
     setAdding(true);
     try {
-      const response = await fetch("http://localhost:5001/api/orders", {
+      const response = await fetch(`${API_BASE_URL}/api/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -106,7 +107,7 @@ const Bestellingen = () => {
   // Delete single item
   const handleDeleteItem = async (id) => {
     try {
-      const response = await fetch(`http://localhost:5001/api/orders/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/orders/${id}`, {
         method: "DELETE",
       });
 
@@ -123,7 +124,7 @@ const Bestellingen = () => {
     setClearing(true);
     try {
       const response = await fetch(
-        `http://localhost:5001/api/orders?role=${user.role}`,
+        `${API_BASE_URL}/api/orders?role=${user.role}`,
         { method: "DELETE" }
       );
 

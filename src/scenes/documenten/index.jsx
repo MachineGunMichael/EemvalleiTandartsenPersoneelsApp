@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   Typography,
@@ -68,7 +69,7 @@ const Documenten = () => {
   // Fetch documents
   const fetchDocuments = async () => {
     try {
-      const response = await fetch("http://localhost:5001/api/documents");
+      const response = await fetch(`${API_BASE_URL}/api/documents`);
       if (response.ok) {
         const data = await response.json();
         setDocuments(data);
@@ -95,7 +96,7 @@ const Documenten = () => {
     formData.append("uploaded_by", user.id);
 
     try {
-      const response = await fetch("http://localhost:5001/api/documents", {
+      const response = await fetch(`${API_BASE_URL}/api/documents`, {
         method: "POST",
         body: formData,
       });
@@ -119,7 +120,7 @@ const Documenten = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/documents/${editingDocument.id}`,
+        `${API_BASE_URL}/api/documents/${editingDocument.id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -147,7 +148,7 @@ const Documenten = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5001/api/documents/${editingDocument.id}`,
+        `${API_BASE_URL}/api/documents/${editingDocument.id}`,
         { method: "DELETE" }
       );
 
@@ -475,7 +476,7 @@ const Documenten = () => {
               }}
             >
               <iframe
-                src={`http://localhost:5001/api/documents/${selectedDocument.id}/file#toolbar=1&navpanes=0`}
+                src={`${API_BASE_URL}/api/documents/${selectedDocument.id}/file#toolbar=1&navpanes=0`}
                 title={selectedDocument.display_name}
                 style={{
                   width: "100%",

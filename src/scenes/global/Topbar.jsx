@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import API_BASE_URL from "../../config/api";
 import {
   Box,
   IconButton,
@@ -53,7 +54,7 @@ const Topbar = () => {
 
     try {
       // Fetch user's notifications
-      const notifRes = await fetch(`http://localhost:5001/api/notifications/${user.id}?unread_only=true`);
+      const notifRes = await fetch(`${API_BASE_URL}/api/notifications/${user.id}?unread_only=true`);
       if (notifRes.ok) {
         const notifs = await notifRes.json();
         setNotifications(notifs);
@@ -62,8 +63,8 @@ const Topbar = () => {
       // If user is manager or admin, also fetch pending vacation and overtime requests
       if (user.role === "manager" || user.role === "admin") {
         const [vacReqRes, otReqRes] = await Promise.all([
-          fetch(`http://localhost:5001/api/vacation-requests?status=pending&reviewer_role=${user.role}`),
-          fetch(`http://localhost:5001/api/overtime-requests?status=pending&reviewer_role=${user.role}`),
+          fetch(`${API_BASE_URL}/api/vacation-requests?status=pending&reviewer_role=${user.role}`),
+          fetch(`${API_BASE_URL}/api/overtime-requests?status=pending&reviewer_role=${user.role}`),
         ]);
         
         if (vacReqRes.ok) {
@@ -108,7 +109,7 @@ const Topbar = () => {
   const handleApprove = async (requestId) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/vacation-requests/${requestId}/approve`, {
+      const response = await fetch(`${API_BASE_URL}/api/vacation-requests/${requestId}/approve`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewer_id: user.id }),
@@ -127,7 +128,7 @@ const Topbar = () => {
   const handleApproveOvertime = async (requestId) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:5001/api/overtime-requests/${requestId}/approve`, {
+      const response = await fetch(`${API_BASE_URL}/api/overtime-requests/${requestId}/approve`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewer_id: user.id }),
@@ -156,8 +157,8 @@ const Topbar = () => {
     setLoading(true);
     try {
       const endpoint = selectedRequestType === "overtime" 
-        ? `http://localhost:5001/api/overtime-requests/${selectedRequest.id}/reject`
-        : `http://localhost:5001/api/vacation-requests/${selectedRequest.id}/reject`;
+        ? `${API_BASE_URL}/api/overtime-requests/${selectedRequest.id}/reject`
+        : `${API_BASE_URL}/api/vacation-requests/${selectedRequest.id}/reject`;
       
       const response = await fetch(endpoint, {
         method: "PUT",
@@ -179,7 +180,7 @@ const Topbar = () => {
   // Mark notification as read
   const handleMarkAsRead = async (notificationId) => {
     try {
-      await fetch(`http://localhost:5001/api/notifications/${notificationId}/read`, {
+      await fetch(`${API_BASE_URL}/api/notifications/${notificationId}/read`, {
         method: "PUT",
       });
       fetchNotifications();
