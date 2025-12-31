@@ -151,6 +151,51 @@ db.serialize(() => {
     }
   );
 
+  // Create documents table
+  db.run(
+    `
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      uploaded_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `,
+    (err) => {
+      if (err) {
+        console.error("Error creating documents table:", err.message);
+      } else {
+        console.log("Documents table created successfully.");
+      }
+    }
+  );
+
+  // Create order_items table
+  db.run(
+    `
+    CREATE TABLE IF NOT EXISTS order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_text TEXT NOT NULL,
+      added_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `,
+    (err) => {
+      if (err) {
+        console.error("Error creating order_items table:", err.message);
+      } else {
+        console.log("Order items table created successfully.");
+      }
+    }
+  );
+
   // Hash passwords
   const adminPassword = bcrypt.hashSync("admin", 10);
   const duyguPassword = bcrypt.hashSync("duygu123", 10);

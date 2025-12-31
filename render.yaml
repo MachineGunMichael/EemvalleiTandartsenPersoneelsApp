@@ -7,13 +7,14 @@ services:
     plan: starter      # Required for persistent disk ($7/month)
     buildCommand: npm install --legacy-peer-deps && npm run build && cd server && npm install
     startCommand: |
-      # FORCE copy database (TEMPORARY - revert after successful deploy!)
-      echo "Force copying database to persistent disk..."
-      mkdir -p /var/data
-      cp -f server/database.sqlite /var/data/database.sqlite
-      mkdir -p /var/data/uploads
-      cp -rf server/uploads/* /var/data/uploads/ 2>/dev/null || true
-      echo "Database copied successfully"
+      # Initialize database if it doesn't exist
+      if [ ! -f /var/data/database.sqlite ]; then
+        echo "No database found. Initializing fresh database..."
+        mkdir -p /var/data
+        mkdir -p /var/data/uploads
+        cd server && node init-db.js
+        echo "Database initialized with default admin user"
+      fi
       cd server && npm start
     envVars:
       - key: NODE_ENV

@@ -14,13 +14,13 @@ yarn-error.log*
 .env
 server/.env
 
-# ---- SQLite (commented out for initial deployment - uncomment after first deploy)
-# server/database.sqlite
+# ---- SQLite (local development database - production uses /var/data/)
+server/database.sqlite
 server/database.sqlite-wal
 server/database.sqlite-shm
 
-# ---- Uploads (commented out for initial deployment - uncomment after first deploy)
-# server/uploads/
+# ---- Uploads (local uploads - production uses /var/data/uploads/)
+server/uploads/
 
 
 # ---- Editor/OS
