@@ -1,7 +1,7 @@
 services:
   # Combined Frontend + Backend Service
   - type: web
-    name: personeel-app
+    name: eemvalleitandartsen-personeel-app
     runtime: node
     region: frankfurt  # EU region for Netherlands
     plan: starter      # Required for persistent disk ($7/month)
@@ -29,3 +29,6 @@ services:
       name: data
       mountPath: /var/data
       sizeGB: 1  # 1GB included with Starter plan
+    # Custom domain (still requires DNS configuration at SiteGround)
+    customDomains:
+      - app.eemvalleitandartsen.nl
