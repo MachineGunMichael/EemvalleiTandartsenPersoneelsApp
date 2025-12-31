@@ -12,6 +12,7 @@ import Overuren from "./scenes/overuren";
 import Medewerkers from "./scenes/medewerkers";
 import Instellingen from "./scenes/instellingen";
 import Documenten from "./scenes/documenten";
+import Bestellingen from "./scenes/bestellingen";
 import Login from "./scenes/login";
 
 // Main layout with sidebar and topbar
@@ -82,6 +83,9 @@ function App() {
             )}
             {currentRole === "admin" && (
               <Route path="/instellingen" element={<Instellingen />} />
+            )}
+            {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee") && (
+              <Route path="/bestellingen" element={<Bestellingen />} />
             )}
             {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee") && (
               <Route path="/documenten" element={<Documenten />} />

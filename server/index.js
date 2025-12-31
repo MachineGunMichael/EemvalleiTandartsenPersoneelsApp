@@ -2382,6 +2382,89 @@ app.delete("/api/documents/:id", (req, res) => {
   });
 });
 
+// ==================== ORDERS (BESTELLINGEN) API ====================
+
+// Get all order items
+app.get("/api/orders", (req, res) => {
+  db.all(
+    `SELECT o.*, u.name as added_by_name 
+     FROM order_items o 
+     LEFT JOIN users u ON o.added_by = u.id 
+     ORDER BY o.created_at DESC`,
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error("Error fetching orders:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
+      res.json(rows || []);
+    }
+  );
+});
+
+// Add an order item (all roles can add)
+app.post("/api/orders", (req, res) => {
+  const { item_text, added_by } = req.body;
+  
+  if (!item_text || !added_by) {
+    return res.status(400).json({ error: "Item text and user ID required" });
+  }
+
+  db.run(
+    `INSERT INTO order_items (item_text, added_by) VALUES (?, ?)`,
+    [item_text.trim(), added_by],
+    function (err) {
+      if (err) {
+        console.error("Error adding order item:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
+      
+      res.status(201).json({
+        id: this.lastID,
+        item_text: item_text.trim(),
+        added_by,
+        created_at: new Date().toISOString(),
+      });
+    }
+  );
+});
+
+// Delete a single order item (all roles can delete individual items)
+app.delete("/api/orders/:id", (req, res) => {
+  const { id } = req.params;
+  
+  db.run("DELETE FROM order_items WHERE id = ?", [id], function (err) {
+    if (err) {
+      console.error("Error deleting order item:", err.message);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "Order item not found" });
+    }
+    
+    res.json({ message: "Item deleted successfully" });
+  });
+});
+
+// Clear all order items (only manager/admin)
+app.delete("/api/orders", (req, res) => {
+  const { role } = req.query;
+  
+  if (role !== "admin" && role !== "manager") {
+    return res.status(403).json({ error: "Only managers and admins can clear the list" });
+  }
+  
+  db.run("DELETE FROM order_items", function (err) {
+    if (err) {
+      console.error("Error clearing order items:", err.message);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    res.json({ message: "All items cleared successfully", deleted: this.changes });
+  });
+});
+
 startServer();
 
 // Graceful shutdown

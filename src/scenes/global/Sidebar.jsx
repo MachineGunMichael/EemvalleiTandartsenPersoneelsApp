@@ -11,6 +11,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import BeachAccessOutlinedIcon from "@mui/icons-material/BeachAccessOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import MoreTimeOutlinedIcon from "@mui/icons-material/MoreTimeOutlined";
+import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 
 const Item = ({ title, to, icon, selected, setSelected }) => {
   return (
@@ -40,6 +41,8 @@ const getIcon = (iconName) => {
       return <FolderOutlinedIcon />;
     case "overtime":
       return <MoreTimeOutlinedIcon />;
+    case "orders":
+      return <ShoppingCartOutlinedIcon />;
     default:
       return <DashboardIcon />;
   }
