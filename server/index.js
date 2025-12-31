@@ -4,6 +4,38 @@ const sqlite3 = require("sqlite3").verbose();
 const bcrypt = require("bcryptjs");
 const path = require("path");
 const nodemailer = require("nodemailer");
+const multer = require("multer");
+const fs = require("fs");
+const { v4: uuidv4 } = require("uuid");
+
+// Configure multer for file uploads
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueId = uuidv4();
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueId}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF files are allowed"), false);
+    }
+  },
+});
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -2198,6 +2230,157 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// ==================== DOCUMENTS API ====================
+
+// Get all documents
+app.get("/api/documents", (req, res) => {
+  db.all(
+    `SELECT d.*, u.name as uploaded_by_name 
+     FROM documents d 
+     LEFT JOIN users u ON d.uploaded_by = u.id 
+     ORDER BY d.created_at DESC`,
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error("Error fetching documents:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
+      res.json(rows || []);
+    }
+  );
+});
+
+// Upload a document
+app.post("/api/documents", upload.single("document"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+
+  const displayName = req.body.display_name || req.body.displayName;
+  const uploadedBy = req.body.uploaded_by || req.body.uploadedBy;
+  
+  if (!displayName) {
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: "Display name required" });
+  }
+
+  db.run(
+    `INSERT INTO documents (filename, original_name, display_name, mime_type, size, uploaded_by)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      req.file.filename,
+      req.file.originalname,
+      displayName,
+      req.file.mimetype,
+      req.file.size,
+      uploadedBy,
+    ],
+    function (err) {
+      if (err) {
+        console.error("Error saving document:", err.message);
+        fs.unlinkSync(req.file.path);
+        return res.status(500).json({ error: "Database error" });
+      }
+      
+      res.status(201).json({
+        id: this.lastID,
+        filename: req.file.filename,
+        original_name: req.file.originalname,
+        display_name: displayName,
+        mime_type: req.file.mimetype,
+        size: req.file.size,
+        uploaded_by: uploadedBy,
+      });
+    }
+  );
+});
+
+// Serve document file
+app.get("/api/documents/:id/file", (req, res) => {
+  const { id } = req.params;
+  
+  db.get("SELECT * FROM documents WHERE id = ?", [id], (err, doc) => {
+    if (err) {
+      console.error("Error fetching document:", err.message);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    if (!doc) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+    
+    const filePath = path.join(uploadsDir, doc.filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "File not found on disk" });
+    }
+    
+    res.setHeader("Content-Type", doc.mime_type);
+    res.setHeader("Content-Disposition", `inline; filename="${doc.original_name}"`);
+    res.sendFile(filePath);
+  });
+});
+
+// Update document name
+app.put("/api/documents/:id", (req, res) => {
+  const { id } = req.params;
+  const displayName = req.body.display_name || req.body.displayName;
+  
+  if (!displayName) {
+    return res.status(400).json({ error: "Display name required" });
+  }
+  
+  db.run(
+    "UPDATE documents SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [displayName, id],
+    function (err) {
+      if (err) {
+        console.error("Error updating document:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
+      
+      if (this.changes === 0) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      
+      res.json({ message: "Document updated successfully" });
+    }
+  );
+});
+
+// Delete document
+app.delete("/api/documents/:id", (req, res) => {
+  const { id } = req.params;
+  
+  db.get("SELECT * FROM documents WHERE id = ?", [id], (err, doc) => {
+    if (err) {
+      console.error("Error fetching document:", err.message);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    if (!doc) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+    
+    // Delete from database
+    db.run("DELETE FROM documents WHERE id = ?", [id], function (err) {
+      if (err) {
+        console.error("Error deleting document:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
+      
+      // Delete file from disk
+      const filePath = path.join(uploadsDir, doc.filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      
+      res.json({ message: "Document deleted successfully" });
+    });
+  });
+});
 
 startServer();
 

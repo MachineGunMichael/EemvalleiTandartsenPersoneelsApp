@@ -8,6 +8,8 @@
     npm install @mui/x-date-pickers date-fns
     npm install react-pro-sidebar
     npm install @nivo/core @nivo/pie @nivo/line @nivo/bar --legacy-peer-deps
+    npm install nodemailer
+    npm install multer uuid
 
 --Server--
 create:
