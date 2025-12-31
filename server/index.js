@@ -352,7 +352,7 @@ app.post("/api/users", (req, res) => {
     return res.status(400).json({ message: "Alle velden zijn verplicht" });
   }
 
-  if (!["admin", "manager", "employee"].includes(role)) {
+  if (!["admin", "manager", "employee", "basic"].includes(role)) {
     return res.status(400).json({ message: "Ongeldige rol" });
   }
 

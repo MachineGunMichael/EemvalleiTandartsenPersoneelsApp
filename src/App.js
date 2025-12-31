@@ -71,7 +71,14 @@ function App() {
         <CssBaseline />
         <MainLayout>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            {/* Dashboard - not for basic role */}
+            {currentRole !== "basic" && (
+              <Route path="/" element={<Dashboard />} />
+            )}
+            {/* Redirect basic users from / to /bestellingen */}
+            {currentRole === "basic" && (
+              <Route path="/" element={<Navigate to="/bestellingen" replace />} />
+            )}
             {(currentRole === "manager" || currentRole === "employee") && (
               <Route path="/vakantie" element={<Vakantie />} />
             )}
@@ -84,13 +91,14 @@ function App() {
             {currentRole === "admin" && (
               <Route path="/instellingen" element={<Instellingen />} />
             )}
-            {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee") && (
+            {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee" || currentRole === "basic") && (
               <Route path="/bestellingen" element={<Bestellingen />} />
             )}
-            {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee") && (
+            {(currentRole === "admin" || currentRole === "manager" || currentRole === "employee" || currentRole === "basic") && (
               <Route path="/documenten" element={<Documenten />} />
             )}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Catch-all redirect */}
+            <Route path="*" element={<Navigate to={currentRole === "basic" ? "/bestellingen" : "/"} replace />} />
           </Routes>
         </MainLayout>
       </ThemeProvider>

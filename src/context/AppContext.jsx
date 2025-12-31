@@ -35,6 +35,10 @@ export const roleRoutes = {
     { path: "/bestellingen", name: "Bestellingen", icon: "orders" },
     { path: "/documenten", name: "Documenten", icon: "folder" },
   ],
+  basic: [
+    { path: "/bestellingen", name: "Bestellingen", icon: "orders" },
+    { path: "/documenten", name: "Documenten", icon: "folder" },
+  ],
 };
 
 export function AppContextProvider({ children }) {

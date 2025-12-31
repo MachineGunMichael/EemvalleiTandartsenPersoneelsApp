@@ -541,6 +541,7 @@ const Instellingen = () => {
               onChange={handleInputChange}
               label="Rol"
             >
+              <MenuItem value="basic">Basis</MenuItem>
               <MenuItem value="employee">Medewerker</MenuItem>
               <MenuItem value="manager">Manager</MenuItem>
               <MenuItem value="admin">Beheerder</MenuItem>
@@ -858,6 +859,7 @@ const Instellingen = () => {
                   onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value })}
                   label="Rol"
                 >
+                  <MenuItem value="basic">Basis</MenuItem>
                   <MenuItem value="employee">Medewerker</MenuItem>
                   <MenuItem value="manager">Manager</MenuItem>
                   <MenuItem value="admin">Beheerder</MenuItem>

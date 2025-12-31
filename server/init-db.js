@@ -39,7 +39,7 @@ db.serialize(() => {
       password TEXT NOT NULL,
       plain_password TEXT,
       name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin', 'manager', 'employee')),
+      role TEXT NOT NULL CHECK(role IN ('admin', 'manager', 'employee', 'basic')),
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
