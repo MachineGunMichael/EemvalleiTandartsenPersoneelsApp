@@ -2211,11 +2211,12 @@ if (process.env.NODE_ENV === "production") {
   app.use(express.static(buildPath));
   
   // Handle React routing - serve index.html for all non-API routes
-  app.get("*", (req, res) => {
-    // Don't serve index.html for API routes
-    if (!req.path.startsWith("/api/")) {
-      res.sendFile(path.join(buildPath, "index.html"));
+  app.get("*", (req, res, next) => {
+    // Don't serve index.html for API routes - pass to next handler
+    if (req.path.startsWith("/api/")) {
+      return next();
     }
+    res.sendFile(path.join(buildPath, "index.html"));
   });
 }
 
