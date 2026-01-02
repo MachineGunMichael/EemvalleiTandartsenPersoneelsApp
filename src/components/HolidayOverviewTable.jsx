@@ -46,11 +46,11 @@ const HolidayOverviewTable = ({ holidayData, title = "Vakantie-uren Overzicht", 
           backgroundColor: "transparent",
           borderRadius: "12px",
           boxShadow: "none",
-          overflow: "hidden",
+          overflowX: "auto",
           border: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
         }}
       >
-        <Table>
+        <Table sx={{ minWidth: 450 }}>
           <TableHead>
             <TableRow
               sx={{

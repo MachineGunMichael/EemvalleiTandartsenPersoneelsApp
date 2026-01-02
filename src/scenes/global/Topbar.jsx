@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import API_BASE_URL from "../../config/api";
 import {
   Box,
   IconButton,
   useTheme,
+  useMediaQuery,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -17,9 +18,10 @@ import {
   TextField,
   CircularProgress,
 } from "@mui/material";
-import { useContext } from "react";
 import { ColorModeContext, tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
+import { useSidebar } from "../../context/SidebarContext";
+import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
@@ -35,6 +37,10 @@ const Topbar = () => {
   const isDarkMode = theme.palette.mode === "dark";
   const colorMode = useContext(ColorModeContext);
   const { user, logout } = useAuth();
+  const { openMobileSidebar } = useSidebar();
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
 
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [notificationAnchor, setNotificationAnchor] = useState(null);
@@ -210,17 +216,45 @@ const Topbar = () => {
 
   const notificationOpen = Boolean(notificationAnchor);
 
-  return (
-    <Box
-      display="flex"
-      justifyContent="space-between"
-      alignItems="center"
-      height="140px"
-      px={4}
-      py={2}
-    >
-      <Box></Box>
+  // ========== TOPBAR STYLES ==========
+  const topbarStyles = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    // Responsive height
+    height: { xs: "80px", md: "140px" },
+    // Responsive padding
+    px: { xs: 2, md: 4 },
+    pt: { xs: 2, md: 2 },
+    pb: { xs: 3, md: 2 },
+  };
 
+  return (
+    <Box sx={topbarStyles}>
+      {/* Left side: Hamburger menu (mobile) or empty (desktop) */}
+      <Box display="flex" alignItems="center" gap={3}>
+        {/* Hamburger menu - only on mobile */}
+        {isMobile && (
+          <IconButton
+            onClick={openMobileSidebar}
+            sx={{ color: colors.primary[800] }}
+          >
+            <MenuOutlinedIcon />
+          </IconButton>
+        )}
+        
+        {/* Logo - only on mobile */}
+        {isMobile && (
+          <img
+            alt="Eemvallei Tandartsen logo"
+            height="35px"
+            src="/assets/ET-logo.png"
+            style={{ marginLeft: "4px" }}
+          />
+        )}
+      </Box>
+
+      {/* Right side: Action buttons */}
       <Box display="flex">
         <IconButton
           onClick={colorMode?.toggleColorMode || (() => {})}

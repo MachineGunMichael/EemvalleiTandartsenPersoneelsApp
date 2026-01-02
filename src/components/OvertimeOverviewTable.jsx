@@ -46,11 +46,11 @@ const OvertimeOverviewTable = ({ overtimeData, title = "Overuren Overzicht", tit
           backgroundColor: "transparent",
           borderRadius: "12px",
           boxShadow: "none",
-          overflow: "hidden",
+          overflowX: "auto",
           border: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
         }}
       >
-        <Table>
+        <Table sx={{ minWidth: 550 }}>
           <TableHead>
             <TableRow
               sx={{

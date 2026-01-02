@@ -4,6 +4,7 @@ import {
   Box,
   Typography,
   useTheme,
+  useMediaQuery,
   Button,
   IconButton,
   TextField,
@@ -21,6 +22,7 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 
@@ -29,6 +31,9 @@ const Documenten = () => {
   const colors = tokens(theme.palette.mode);
   const isDarkMode = theme.palette.mode === "dark";
   const { user } = useAuth();
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
   
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -182,253 +187,243 @@ const Documenten = () => {
   };
 
   return (
-    <Box m="20px" mt="-76px" height="calc(100vh - 100px)">
+    <Box 
+      sx={{ 
+        m: { xs: "16px", md: "20px" }, 
+        mt: { xs: "0px", md: "-76px" },
+        height: { xs: "calc(100vh - 86px)", md: "calc(100vh - 100px)" },
+      }}
+    >
       {/* Header */}
-      <Box mb={3}>
-        <Typography variant="h2" color={colors.primary[800]} fontWeight="bold">
+      <Box mb={{ xs: 2, md: 3 }}>
+        <Typography variant={isMobile ? "h3" : "h2"} color={colors.primary[800]} fontWeight="bold">
           Documenten
         </Typography>
-        <Typography variant="h5" color={colors.taupeAccent[500]}>
+        <Typography variant={isMobile ? "body1" : "h5"} color={colors.taupeAccent[500]}>
           Richtlijnen en Protocollen
         </Typography>
       </Box>
 
-      {/* Main Content */}
-      <Box
-        display="flex"
-        gap={3}
-        height="calc(100% - 80px)"
-        sx={{ minHeight: 0 }}
-      >
-        {/* Document List */}
-        <Paper
-          elevation={0}
-          sx={{
-            width: selectedDocument ? "40%" : "100%",
-            backgroundColor: isDarkMode ? colors.primary[200] : colors.primary[100],
-            borderRadius: "16px",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-            transition: "width 0.3s ease",
-          }}
-        >
-          <Box
-            sx={{
-              p: 2.5,
-              borderBottom: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              minHeight: "76px", // Consistent height regardless of button
-            }}
-          >
-            <Box>
-              <Typography
-                variant="h5"
-                fontWeight="600"
-                color={colors.primary[800]}
-              >
-                Alle Documenten
-              </Typography>
-              <Typography variant="body2" color={colors.taupeAccent[500]}>
-                {documents.length} document{documents.length !== 1 ? "en" : ""}
-              </Typography>
-            </Box>
-            {canManage && (
-              <Button
-                variant="contained"
-                startIcon={<UploadFileOutlinedIcon />}
-                onClick={() => setUploadDialogOpen(true)}
+      {/* ========== MOBILE VIEW ========== */}
+      {isMobile && (
+        <Box sx={{ height: "calc(100% - 70px)", minHeight: 0 }}>
+          {/* Mobile: Show document list OR PDF viewer (not both) */}
+          {!selectedDocument ? (
+            // Mobile Document List
+            <Paper
+              elevation={0}
+              sx={{
+                height: "100%",
+                backgroundColor: isDarkMode ? colors.primary[200] : colors.primary[100],
+                borderRadius: "16px",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Box
                 sx={{
-                  backgroundColor: colors.taupeAccent[500],
-                  color: "#fff",
-                  fontWeight: 600,
-                  px: 2.5,
-                  py: 1,
-                  borderRadius: "10px",
-                  textTransform: "none",
-                  "&:hover": {
-                    backgroundColor: colors.taupeAccent[600],
-                  },
+                  p: 2,
+                  borderBottom: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
                 }}
               >
-                Document Uploaden
-              </Button>
-            )}
-          </Box>
-
-          <Box
-            sx={{
-              flex: 1,
-              overflow: "auto",
-              p: 2,
-            }}
-          >
-            {loading ? (
-              <Box display="flex" justifyContent="center" alignItems="center" height="200px">
-                <CircularProgress sx={{ color: colors.taupeAccent[500] }} />
-              </Box>
-            ) : documents.length === 0 ? (
-              <Box
-                display="flex"
-                flexDirection="column"
-                alignItems="center"
-                justifyContent="center"
-                height="200px"
-                sx={{ opacity: 0.6 }}
-              >
-                <DescriptionOutlinedIcon
-                  sx={{ fontSize: 64, color: colors.taupeAccent[400], mb: 2 }}
-                />
-                <Typography color={colors.primary[700]}>
-                  Geen documenten gevonden
-                </Typography>
-                {canManage && (
-                  <Typography variant="body2" color={colors.taupeAccent[500]}>
-                    Upload uw eerste document
+                <Box>
+                  <Typography variant="h5" fontWeight="600" color={colors.primary[800]}>
+                    Alle Documenten
                   </Typography>
-                )}
-              </Box>
-            ) : (
-              <Box display="flex" flexDirection="column" gap={1.5}>
-                {documents.map((doc) => (
-                  <Box
-                    key={doc.id}
-                    onClick={() => setSelectedDocument(doc)}
+                  <Typography variant="body2" color={colors.taupeAccent[500]}>
+                    {documents.length} document{documents.length !== 1 ? "en" : ""}
+                  </Typography>
+                </Box>
+                {canManage && (
+                  <IconButton
+                    onClick={() => setUploadDialogOpen(true)}
                     sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 2,
-                      p: 2,
-                      borderRadius: "12px",
-                      cursor: "pointer",
-                      backgroundColor:
-                        selectedDocument?.id === doc.id
-                          ? isDarkMode
-                            ? colors.taupeAccent[600]
-                            : colors.taupeAccent[200]
-                          : "transparent",
-                      border: `1px solid ${
-                        selectedDocument?.id === doc.id
-                          ? colors.taupeAccent[400]
-                          : "transparent"
-                      }`,
-                      transition: "all 0.2s ease",
-                      "&:hover": {
-                        backgroundColor: isDarkMode
-                          ? colors.primary[300]
-                          : colors.taupeAccent[100],
-                      },
+                      backgroundColor: colors.taupeAccent[500],
+                      color: "#fff",
+                      "&:hover": { backgroundColor: colors.taupeAccent[600] },
                     }}
                   >
-                    <Box
-                      sx={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: "10px",
-                        backgroundColor: isDarkMode
-                          ? colors.redAccent[700]
-                          : colors.redAccent[100],
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <PictureAsPdfOutlinedIcon
+                    <UploadFileOutlinedIcon />
+                  </IconButton>
+                )}
+              </Box>
+
+              <Box sx={{ flex: 1, overflow: "auto", p: 2 }}>
+                {loading ? (
+                  <Box display="flex" justifyContent="center" alignItems="center" height="200px">
+                    <CircularProgress sx={{ color: colors.taupeAccent[500] }} />
+                  </Box>
+                ) : documents.length === 0 ? (
+                  <Box
+                    display="flex"
+                    flexDirection="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    height="200px"
+                    sx={{ opacity: 0.6 }}
+                  >
+                    <DescriptionOutlinedIcon sx={{ fontSize: 64, color: colors.taupeAccent[400], mb: 2 }} />
+                    <Typography color={colors.primary[700]}>Geen documenten gevonden</Typography>
+                  </Box>
+                ) : (
+                  <Box display="flex" flexDirection="column" gap={1.5}>
+                    {documents.map((doc) => (
+                      <Box
+                        key={doc.id}
+                        onClick={() => setSelectedDocument(doc)}
                         sx={{
-                          color: isDarkMode
-                            ? colors.redAccent[200]
-                            : colors.redAccent[500],
-                          fontSize: 26,
-                        }}
-                      />
-                    </Box>
-                    <Box flex={1} minWidth={0}>
-                      <Typography
-                        fontWeight="600"
-                        color={colors.primary[800]}
-                        sx={{
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 2,
+                          p: 2,
+                          borderRadius: "12px",
+                          cursor: "pointer",
+                          backgroundColor: "transparent",
+                          border: `1px solid transparent`,
+                          transition: "all 0.2s ease",
+                          "&:hover": {
+                            backgroundColor: isDarkMode ? colors.primary[300] : colors.taupeAccent[100],
+                          },
                         }}
                       >
-                        {doc.display_name}
-                      </Typography>
-                      <Typography variant="body2" color={colors.taupeAccent[500]}>
-                        {formatFileSize(doc.size)} • {formatDate(doc.created_at)}
-                      </Typography>
-                    </Box>
-                    {canManage && (
-                      <Box display="flex" gap={0.5}>
-                        <Tooltip title="Hernoemen">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingDocument(doc);
-                              setNewDisplayName(doc.display_name);
-                              setEditDialogOpen(true);
-                            }}
-                            sx={{
-                              color: colors.taupeAccent[500],
-                              "&:hover": {
-                                backgroundColor: isDarkMode
-                                  ? colors.primary[400]
-                                  : colors.taupeAccent[200],
-                              },
-                            }}
+                        <Box
+                          sx={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: "10px",
+                            backgroundColor: isDarkMode ? colors.redAccent[700] : colors.redAccent[100],
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <PictureAsPdfOutlinedIcon
+                            sx={{ color: isDarkMode ? colors.redAccent[200] : colors.redAccent[500], fontSize: 26 }}
+                          />
+                        </Box>
+                        <Box flex={1} minWidth={0}>
+                          <Typography
+                            fontWeight="600"
+                            color={colors.primary[800]}
+                            sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                           >
-                            <EditOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Verwijderen">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingDocument(doc);
-                              setDeleteDialogOpen(true);
-                            }}
-                            sx={{
-                              color: colors.redAccent[500],
-                              "&:hover": {
-                                backgroundColor: isDarkMode
-                                  ? colors.redAccent[800]
-                                  : colors.redAccent[100],
-                              },
-                            }}
-                          >
-                            <DeleteOutlineOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                            {doc.display_name}
+                          </Typography>
+                          <Typography variant="body2" color={colors.taupeAccent[500]}>
+                            {formatFileSize(doc.size)} • {formatDate(doc.created_at)}
+                          </Typography>
+                        </Box>
                       </Box>
-                    )}
-                    {/* Spacer to keep consistent layout when icons are hidden */}
-                    {!canManage && <Box sx={{ width: 72 }} />}
+                    ))}
                   </Box>
-                ))}
+                )}
               </Box>
-            )}
-          </Box>
-        </Paper>
+            </Paper>
+          ) : (
+            // Mobile PDF Viewer (full screen)
+            <Paper
+              elevation={0}
+              sx={{
+                height: "100%",
+                backgroundColor: isDarkMode ? colors.primary[200] : colors.primary[100],
+                borderRadius: "16px",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {/* Mobile Viewer Header with Back Button */}
+              <Box
+                sx={{
+                  p: 2,
+                  borderBottom: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                <IconButton
+                  onClick={() => setSelectedDocument(null)}
+                  sx={{
+                    color: colors.primary[800],
+                    backgroundColor: isDarkMode ? colors.primary[300] : colors.taupeAccent[100],
+                    "&:hover": {
+                      backgroundColor: isDarkMode ? colors.primary[400] : colors.taupeAccent[200],
+                    },
+                  }}
+                >
+                  <ArrowBackOutlinedIcon />
+                </IconButton>
+                <Box flex={1} minWidth={0}>
+                  <Typography
+                    variant="h6"
+                    fontWeight="600"
+                    color={colors.primary[800]}
+                    sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {selectedDocument.display_name}
+                  </Typography>
+                  <Typography variant="caption" color={colors.taupeAccent[500]}>
+                    {formatFileSize(selectedDocument.size)} • {formatDate(selectedDocument.created_at)}
+                  </Typography>
+                </Box>
+              </Box>
 
-        {/* PDF Preview Pane */}
-        {selectedDocument && (
+              {/* Mobile PDF Viewer */}
+              <Box
+                sx={{
+                  flex: 1,
+                  p: 1,
+                  backgroundColor: isDarkMode ? colors.primary[300] : "#e8e4df",
+                  overflow: "hidden",
+                }}
+              >
+                <iframe
+                  src={`${API_BASE_URL}/api/documents/${selectedDocument.id}/file#toolbar=1&navpanes=0`}
+                  title={selectedDocument.display_name}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                    borderRadius: "8px",
+                    backgroundColor: "#fff",
+                  }}
+                />
+              </Box>
+            </Paper>
+          )}
+        </Box>
+      )}
+
+      {/* ========== DESKTOP VIEW ========== */}
+      {!isMobile && (
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "row",
+            gap: 3,
+            height: "calc(100% - 80px)",
+            minHeight: 0,
+          }}
+        >
+          {/* Desktop Document List */}
           <Paper
             elevation={0}
             sx={{
-              flex: 1,
+              width: selectedDocument ? "40%" : "100%",
               backgroundColor: isDarkMode ? colors.primary[200] : colors.primary[100],
               borderRadius: "16px",
               overflow: "hidden",
               display: "flex",
               flexDirection: "column",
+              transition: "width 0.3s ease",
             }}
           >
-            {/* Preview Header */}
             <Box
               sx={{
                 p: 2.5,
@@ -436,61 +431,233 @@ const Documenten = () => {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                minHeight: "76px",
               }}
             >
               <Box>
-                <Typography
-                  variant="h5"
-                  fontWeight="600"
-                  color={colors.primary[800]}
-                >
-                  {selectedDocument.display_name}
+                <Typography variant="h5" fontWeight="600" color={colors.primary[800]}>
+                  Alle Documenten
                 </Typography>
                 <Typography variant="body2" color={colors.taupeAccent[500]}>
-                  Geüpload door {selectedDocument.uploaded_by_name} •{" "}
-                  {formatDate(selectedDocument.created_at)}
+                  {documents.length} document{documents.length !== 1 ? "en" : ""}
                 </Typography>
               </Box>
-              <IconButton
-                onClick={() => setSelectedDocument(null)}
-                sx={{
-                  color: colors.primary[700],
-                  "&:hover": {
-                    backgroundColor: isDarkMode
-                      ? colors.primary[300]
-                      : colors.taupeAccent[200],
-                  },
-                }}
-              >
-                <CloseOutlinedIcon />
-              </IconButton>
+              {canManage && (
+                <Button
+                  variant="contained"
+                  startIcon={<UploadFileOutlinedIcon />}
+                  onClick={() => setUploadDialogOpen(true)}
+                  sx={{
+                    backgroundColor: colors.taupeAccent[500],
+                    color: "#fff",
+                    fontWeight: 600,
+                    px: 2.5,
+                    py: 1,
+                    borderRadius: "10px",
+                    textTransform: "none",
+                    "&:hover": { backgroundColor: colors.taupeAccent[600] },
+                  }}
+                >
+                  Document Uploaden
+                </Button>
+              )}
             </Box>
 
-            {/* PDF Viewer */}
-            <Box
-              sx={{
-                flex: 1,
-                p: 2,
-                backgroundColor: isDarkMode ? colors.primary[300] : "#e8e4df",
-                minHeight: "500px",
-              }}
-            >
-              <iframe
-                src={`${API_BASE_URL}/api/documents/${selectedDocument.id}/file#toolbar=1&navpanes=0`}
-                title={selectedDocument.display_name}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  border: "none",
-                  borderRadius: "8px",
-                  backgroundColor: "#fff",
-                  minHeight: "480px",
-                }}
-              />
+            <Box sx={{ flex: 1, overflow: "auto", p: 2 }}>
+              {loading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" height="200px">
+                  <CircularProgress sx={{ color: colors.taupeAccent[500] }} />
+                </Box>
+              ) : documents.length === 0 ? (
+                <Box
+                  display="flex"
+                  flexDirection="column"
+                  alignItems="center"
+                  justifyContent="center"
+                  height="200px"
+                  sx={{ opacity: 0.6 }}
+                >
+                  <DescriptionOutlinedIcon sx={{ fontSize: 64, color: colors.taupeAccent[400], mb: 2 }} />
+                  <Typography color={colors.primary[700]}>Geen documenten gevonden</Typography>
+                  {canManage && (
+                    <Typography variant="body2" color={colors.taupeAccent[500]}>
+                      Upload uw eerste document
+                    </Typography>
+                  )}
+                </Box>
+              ) : (
+                <Box display="flex" flexDirection="column" gap={1.5}>
+                  {documents.map((doc) => (
+                    <Box
+                      key={doc.id}
+                      onClick={() => setSelectedDocument(doc)}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
+                        p: 2,
+                        borderRadius: "12px",
+                        cursor: "pointer",
+                        backgroundColor:
+                          selectedDocument?.id === doc.id
+                            ? isDarkMode
+                              ? colors.taupeAccent[600]
+                              : colors.taupeAccent[200]
+                            : "transparent",
+                        border: `1px solid ${
+                          selectedDocument?.id === doc.id ? colors.taupeAccent[400] : "transparent"
+                        }`,
+                        transition: "all 0.2s ease",
+                        "&:hover": {
+                          backgroundColor: isDarkMode ? colors.primary[300] : colors.taupeAccent[100],
+                        },
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: "10px",
+                          backgroundColor: isDarkMode ? colors.redAccent[700] : colors.redAccent[100],
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <PictureAsPdfOutlinedIcon
+                          sx={{ color: isDarkMode ? colors.redAccent[200] : colors.redAccent[500], fontSize: 26 }}
+                        />
+                      </Box>
+                      <Box flex={1} minWidth={0}>
+                        <Typography
+                          fontWeight="600"
+                          color={colors.primary[800]}
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {doc.display_name}
+                        </Typography>
+                        <Typography variant="body2" color={colors.taupeAccent[500]}>
+                          {formatFileSize(doc.size)} • {formatDate(doc.created_at)}
+                        </Typography>
+                      </Box>
+                      {canManage && (
+                        <Box display="flex" gap={0.5}>
+                          <Tooltip title="Hernoemen">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingDocument(doc);
+                                setNewDisplayName(doc.display_name);
+                                setEditDialogOpen(true);
+                              }}
+                              sx={{
+                                color: colors.taupeAccent[500],
+                                "&:hover": {
+                                  backgroundColor: isDarkMode ? colors.primary[400] : colors.taupeAccent[200],
+                                },
+                              }}
+                            >
+                              <EditOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Verwijderen">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingDocument(doc);
+                                setDeleteDialogOpen(true);
+                              }}
+                              sx={{
+                                color: colors.redAccent[500],
+                                "&:hover": {
+                                  backgroundColor: isDarkMode ? colors.redAccent[800] : colors.redAccent[100],
+                                },
+                              }}
+                            >
+                              <DeleteOutlineOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      )}
+                      {!canManage && <Box sx={{ width: 72 }} />}
+                    </Box>
+                  ))}
+                </Box>
+              )}
             </Box>
           </Paper>
-        )}
-      </Box>
+
+          {/* Desktop PDF Preview Pane */}
+          {selectedDocument && (
+            <Paper
+              elevation={0}
+              sx={{
+                flex: 1,
+                backgroundColor: isDarkMode ? colors.primary[200] : colors.primary[100],
+                borderRadius: "16px",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Box
+                sx={{
+                  p: 2.5,
+                  borderBottom: `1px solid ${isDarkMode ? colors.primary[300] : colors.taupeAccent[200]}`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Box>
+                  <Typography variant="h5" fontWeight="600" color={colors.primary[800]}>
+                    {selectedDocument.display_name}
+                  </Typography>
+                  <Typography variant="body2" color={colors.taupeAccent[500]}>
+                    Geüpload door {selectedDocument.uploaded_by_name} • {formatDate(selectedDocument.created_at)}
+                  </Typography>
+                </Box>
+                <IconButton
+                  onClick={() => setSelectedDocument(null)}
+                  sx={{
+                    color: colors.primary[700],
+                    "&:hover": {
+                      backgroundColor: isDarkMode ? colors.primary[300] : colors.taupeAccent[200],
+                    },
+                  }}
+                >
+                  <CloseOutlinedIcon />
+                </IconButton>
+              </Box>
+
+              <Box
+                sx={{
+                  flex: 1,
+                  p: 2,
+                  backgroundColor: isDarkMode ? colors.primary[300] : "#e8e4df",
+                  minHeight: "500px",
+                }}
+              >
+                <iframe
+                  src={`${API_BASE_URL}/api/documents/${selectedDocument.id}/file#toolbar=1&navpanes=0`}
+                  title={selectedDocument.display_name}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                    borderRadius: "8px",
+                    backgroundColor: "#fff",
+                    minHeight: "480px",
+                  }}
+                />
+              </Box>
+            </Paper>
+          )}
+        </Box>
+      )}
 
       {/* Upload Dialog */}
       <Dialog

@@ -4,6 +4,7 @@ import {
   Box,
   Typography,
   useTheme,
+  useMediaQuery,
   TextField,
   Button,
   IconButton,
@@ -27,6 +28,9 @@ const Bestellingen = () => {
   const colors = tokens(theme.palette.mode);
   const isDarkMode = theme.palette.mode === "dark";
   const { user } = useAuth();
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -159,13 +163,19 @@ const Bestellingen = () => {
   };
 
   return (
-    <Box m="20px" mt="-76px" height="calc(100vh - 100px)">
+    <Box 
+      sx={{ 
+        m: { xs: "16px", md: "20px" }, 
+        mt: { xs: "0px", md: "-76px" }, 
+        height: { xs: "calc(100vh - 86px)", md: "calc(100vh - 100px)" },
+      }}
+    >
       {/* Header */}
-      <Box mb={3}>
-        <Typography variant="h2" color={colors.primary[800]} fontWeight="bold">
+      <Box mb={{ xs: 2, md: 3 }}>
+        <Typography variant={isMobile ? "h3" : "h2"} color={colors.primary[800]} fontWeight="bold">
           Bestellingen
         </Typography>
-        <Typography variant="h5" color={colors.taupeAccent[500]}>
+        <Typography variant={isMobile ? "body1" : "h5"} color={colors.taupeAccent[500]}>
           Bestellijst voor praktijkbenodigdheden
         </Typography>
       </Box>

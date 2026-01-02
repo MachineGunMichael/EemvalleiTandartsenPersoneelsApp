@@ -4,6 +4,7 @@ import {
   Box,
   Typography,
   useTheme,
+  useMediaQuery,
   Button,
   TextField,
   Alert,
@@ -24,6 +25,9 @@ const Overuren = () => {
   const colors = tokens(theme.palette.mode);
   const isDarkMode = theme.palette.mode === "dark";
   const { user } = useAuth();
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
 
   // State
   const [loading, setLoading] = useState(true);
@@ -152,22 +156,29 @@ const Overuren = () => {
     }
   };
 
+  // ========== PAGE STYLES ==========
+  const pageContainerStyles = {
+    m: { xs: "16px", md: "20px" },
+    mt: { xs: "0px", md: "-76px" },
+    pb: 4,
+  };
+
   if (loading) {
     return (
-      <Box m="20px" mt="-76px" display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <Box sx={pageContainerStyles} display="flex" justifyContent="center" alignItems="center" minHeight="400px">
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box m="20px" mt="-76px" pb={4}>
+    <Box sx={pageContainerStyles}>
       {/* Header */}
-      <Box mb={4}>
-        <Typography variant="h2" color={colors.primary[800]} fontWeight="bold">
+      <Box mb={{ xs: 2, md: 4 }}>
+        <Typography variant={isMobile ? "h3" : "h2"} color={colors.primary[800]} fontWeight="bold">
           Overuren
         </Typography>
-        <Typography variant="h5" color={colors.taupeAccent[500]}>
+        <Typography variant={isMobile ? "body1" : "h5"} color={colors.taupeAccent[500]}>
           Overuren doorgeven en overzicht
         </Typography>
       </Box>
@@ -176,18 +187,26 @@ const Overuren = () => {
       <Box
         sx={{
           backgroundColor: tableColors.container.background,
-          p: 4,
+          p: { xs: 2, md: 4 },
           borderRadius: "12px",
           boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-          mb: 4,
+          mb: { xs: 2, md: 4 },
         }}
       >
-        <Typography variant="h4" fontWeight="600" color={tableColors.cells.text} mb={3}>
+        <Typography variant={isMobile ? "h5" : "h4"} fontWeight="600" color={tableColors.cells.text} mb={3}>
           Overuren Doorgeven
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit}>
-          <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+          <Box 
+            sx={{
+              display: "flex",
+              flexDirection: { xs: "column", md: "row" },
+              gap: 2,
+              alignItems: { xs: "stretch", md: "center" },
+              flexWrap: "wrap",
+            }}
+          >
             <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={nl}>
               <DatePicker
                 label="Datum"
@@ -195,7 +214,7 @@ const Overuren = () => {
                 onChange={(newDate) => setSelectedDate(newDate)}
                 format="dd/MM/yyyy"
                 slotProps={{
-                  textField: { required: true, sx: { ...inputStyles, width: 180 } },
+                  textField: { required: true, sx: { ...inputStyles, width: { xs: "100%", md: 180 } } },
                   day: {
                     sx: {
                       "&.Mui-selected": {
@@ -218,7 +237,7 @@ const Overuren = () => {
               onChange={(e) => setHours(e.target.value)}
               required
               inputProps={{ step: "0.5", min: "0.5" }}
-              sx={{ ...inputStyles, width: 100 }}
+              sx={{ ...inputStyles, width: { xs: "100%", md: 100 } }}
             />
 
             <TextField
@@ -226,18 +245,19 @@ const Overuren = () => {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               required
-              sx={{ ...inputStyles, flex: 1, minWidth: 200 }}
+              sx={{ ...inputStyles, flex: { xs: "none", md: 1 }, width: { xs: "100%", md: "auto" }, minWidth: { md: 200 } }}
             />
 
             <Button
               type="submit"
               variant="contained"
+              fullWidth={isMobile}
               startIcon={<SendOutlinedIcon />}
               sx={{
                 backgroundColor: colors.taupeAccent[500],
                 color: "white",
                 px: 3,
-                height: 40,
+                height: { xs: 48, md: 40 },
                 "&:hover": { backgroundColor: colors.taupeAccent[600] },
               }}
             >
@@ -279,13 +299,14 @@ const Overuren = () => {
       <Box
         sx={{
           backgroundColor: tableColors.container.background,
-          p: 4,
+          p: { xs: 2, md: 4 },
           borderRadius: "12px",
           boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-          mb: 4,
+          mb: { xs: 2, md: 4 },
+          overflowX: "auto",
         }}
       >
-        <OvertimeOverviewTable overtimeData={overtimeData} />
+        <OvertimeOverviewTable overtimeData={overtimeData} titleVariant={isMobile ? "h5" : "h4"} />
       </Box>
 
       {/* Overtime Chart */}

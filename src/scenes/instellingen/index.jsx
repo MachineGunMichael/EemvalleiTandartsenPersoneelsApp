@@ -4,6 +4,7 @@ import {
   Box,
   Typography,
   useTheme,
+  useMediaQuery,
   TextField,
   Button,
   Select,
@@ -43,6 +44,9 @@ const Instellingen = () => {
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
   const isDarkMode = theme.palette.mode === "dark";
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
 
   // Users list state
   const [users, setUsers] = useState([]);
@@ -463,10 +467,10 @@ const Instellingen = () => {
   };
 
   return (
-    <Box m="20px" mt="-76px" pb={4}>
+    <Box sx={{ m: { xs: "16px", md: "20px" }, mt: { xs: "0px", md: "-76px" }, pb: 4 }}>
       {/* Header */}
-      <Box>
-        <Typography variant="h2" color={colors.primary[800]} fontWeight="bold">
+      <Box mb={{ xs: 2, md: 0 }}>
+        <Typography variant={isMobile ? "h3" : "h2"} color={colors.primary[800]} fontWeight="bold">
           Instellingen
         </Typography>
         <Typography variant="h5" color={colors.taupeAccent[500]}>

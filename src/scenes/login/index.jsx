@@ -9,6 +9,7 @@ import {
   IconButton,
   Alert,
   CircularProgress,
+  useMediaQuery,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { tokens } from "../../theme";
@@ -24,6 +25,9 @@ const Login = () => {
   const colors = tokens(theme.palette.mode);
   const { login, isAuthenticated, serverOnline, checkServerStatus } = useAuth();
   const navigate = useNavigate();
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -108,9 +112,9 @@ const Login = () => {
         sx={{
           width: "100%",
           maxWidth: "420px",
-          mx: 3,
-          p: 5,
-          borderRadius: "24px",
+          mx: { xs: 2, md: 3 },
+          p: { xs: 3, md: 5 },
+          borderRadius: { xs: "16px", md: "24px" },
           backgroundColor: "rgba(255, 255, 255, 0.95)",
           backdropFilter: "blur(20px)",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.15)",

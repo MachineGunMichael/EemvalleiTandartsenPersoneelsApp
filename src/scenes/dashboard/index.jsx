@@ -5,6 +5,7 @@ import {
   Box,
   Typography,
   useTheme,
+  useMediaQuery,
   Table,
   TableBody,
   TableCell,
@@ -32,6 +33,9 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { currentRole } = useAppContext();
   const location = useLocation(); // Used to trigger refetch on navigation
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -346,14 +350,32 @@ const Dashboard = () => {
     }
   };
 
+  // ========== PAGE CONTAINER STYLES ==========
+  const pageContainerStyles = {
+    // Responsive margins
+    m: { xs: "16px", md: "20px" },
+    mt: { xs: "0px", md: "-76px" },
+    // Ensure content doesn't overflow on mobile
+    overflow: "hidden",
+  };
+
+  // ========== HEADER STYLES ==========
+  const headerStyles = {
+    mb: { xs: 2, md: 0 },
+  };
+
   return (
-    <Box m="20px" mt="-76px">
+    <Box sx={pageContainerStyles}>
       {/* Header */}
-      <Box>
-        <Typography variant="h2" color={colors.primary[800]} fontWeight="bold">
+      <Box sx={headerStyles}>
+        <Typography 
+          variant={isMobile ? "h3" : "h2"} 
+          color={colors.primary[800]} 
+          fontWeight="bold"
+        >
           Dashboard
         </Typography>
-        <Typography variant="h5" color={colors.taupeAccent[500]}>
+        <Typography variant={isMobile ? "body1" : "h5"} color={colors.taupeAccent[500]}>
           {currentRole === "employee" 
             ? "Uw persoonlijke gegevens" 
             : "Overzicht van alle medewerkers"}
@@ -379,11 +401,14 @@ const Dashboard = () => {
         <TableContainer
           component={Paper}
           sx={{
-            mt: 5, // Control table height placement here
+            mt: { xs: 2, md: 5 },
             backgroundColor: tableColors.container.background,
             borderRadius: "12px",
             boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-            overflow: "hidden",
+            // Enable horizontal scroll on mobile
+            overflowX: "auto",
+            // Smooth scrolling
+            WebkitOverflowScrolling: "touch",
           }}
         >
           <Table>
@@ -625,24 +650,36 @@ const Dashboard = () => {
       {(currentRole === "admin" || currentRole === "manager") && !loading && !error && employees.length > 0 && (
         <Box
           sx={{
-            mt: 5,
-            p: 3,
+            mt: { xs: 3, md: 5 },
+            p: { xs: 2, md: 3 },
             backgroundColor: tableColors.container.background,
             borderRadius: "12px",
             boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+            // Allow horizontal scroll on mobile
+            overflowX: { xs: "auto", md: "visible" },
           }}
         >
           {/* Header with navigation */}
-          <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+          <Box 
+            sx={{ 
+              display: "flex", 
+              flexDirection: { xs: "column", sm: "row" },
+              alignItems: { xs: "flex-start", sm: "center" },
+              justifyContent: "space-between", 
+              mb: 3,
+              gap: { xs: 2, sm: 0 },
+            }}
+          >
             <Box display="flex" alignItems="center" gap={1}>
-              <CalendarMonthIcon sx={{ color: colors.taupeAccent[500], fontSize: 28 }} />
-              <Typography variant="h4" fontWeight="600" color={tableColors.cells.text}>
+              <CalendarMonthIcon sx={{ color: colors.taupeAccent[500], fontSize: { xs: 24, md: 28 } }} />
+              <Typography variant={isMobile ? "h5" : "h4"} fontWeight="600" color={tableColors.cells.text}>
                 Werkrooster
               </Typography>
             </Box>
             <Box display="flex" alignItems="center" gap={1}>
               <IconButton 
                 onClick={() => navigateMonth("prev")}
+                size={isMobile ? "small" : "medium"}
                 sx={{ 
                   color: colors.taupeAccent[500],
                   "&:hover": { backgroundColor: colors.taupeAccent[100] }
@@ -651,15 +688,16 @@ const Dashboard = () => {
                 <ChevronLeftIcon />
               </IconButton>
               <Typography 
-                variant="h5" 
+                variant={isMobile ? "body1" : "h5"}
                 fontWeight="500" 
                 color={tableColors.cells.text}
-                sx={{ minWidth: 160, textAlign: "center" }}
+                sx={{ minWidth: { xs: 120, md: 160 }, textAlign: "center" }}
               >
                 {getMonthName(calendarMonth + 1)} {calendarYear}
               </Typography>
               <IconButton 
                 onClick={() => navigateMonth("next")}
+                size={isMobile ? "small" : "medium"}
                 sx={{ 
                   color: colors.taupeAccent[500],
                   "&:hover": { backgroundColor: colors.taupeAccent[100] }
@@ -675,7 +713,9 @@ const Dashboard = () => {
             sx={{
               display: "grid",
               gridTemplateColumns: "repeat(7, 1fr)",
-              gap: 1,
+              gap: { xs: 0.5, md: 1 },
+              // Minimum width to ensure calendar cells don't get too small on mobile
+              minWidth: { xs: "600px", md: "auto" },
             }}
           >
             {/* Day headers */}
@@ -944,7 +984,12 @@ const Dashboard = () => {
       {/* Contract History for Employee Role Only */}
       {currentRole === "employee" && !loading && contractHistory.length > 0 && (
         <>
-          <Typography variant="h4" fontWeight="600" color={tableColors.cells.text} mt={5} mb={2}>
+          <Typography 
+            variant={isMobile ? "h5" : "h4"} 
+            fontWeight="600" 
+            color={tableColors.cells.text} 
+            sx={{ mt: { xs: 3, md: 5 }, mb: 2 }}
+          >
             Contract Geschiedenis
           </Typography>
           <TableContainer
@@ -953,7 +998,8 @@ const Dashboard = () => {
               backgroundColor: tableColors.container.background,
               borderRadius: "12px",
               boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-              overflow: "hidden",
+              overflowX: "auto",
+              WebkitOverflowScrolling: "touch",
             }}
           >
             <Table>
@@ -1018,24 +1064,35 @@ const Dashboard = () => {
           {/* Personal Werkrooster Calendar for Employee */}
           <Box
             sx={{
-              mt: 5,
-              p: 3,
+              mt: { xs: 3, md: 5 },
+              p: { xs: 2, md: 3 },
               backgroundColor: tableColors.container.background,
               borderRadius: "12px",
               boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+              overflowX: { xs: "auto", md: "visible" },
             }}
           >
             {/* Header with navigation */}
-            <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+            <Box 
+              sx={{ 
+                display: "flex", 
+                flexDirection: { xs: "column", sm: "row" },
+                alignItems: { xs: "flex-start", sm: "center" },
+                justifyContent: "space-between", 
+                mb: 3,
+                gap: { xs: 2, sm: 0 },
+              }}
+            >
               <Box display="flex" alignItems="center" gap={1}>
-                <CalendarMonthIcon sx={{ color: colors.taupeAccent[500], fontSize: 28 }} />
-                <Typography variant="h4" fontWeight="600" color={tableColors.cells.text}>
+                <CalendarMonthIcon sx={{ color: colors.taupeAccent[500], fontSize: { xs: 24, md: 28 } }} />
+                <Typography variant={isMobile ? "h5" : "h4"} fontWeight="600" color={tableColors.cells.text}>
                   Mijn Werkrooster
                 </Typography>
               </Box>
               <Box display="flex" alignItems="center" gap={1}>
                 <IconButton 
                   onClick={() => navigateMonth("prev")}
+                  size={isMobile ? "small" : "medium"}
                   sx={{ 
                     color: colors.taupeAccent[500],
                     "&:hover": { backgroundColor: colors.taupeAccent[100] }
@@ -1044,15 +1101,16 @@ const Dashboard = () => {
                   <ChevronLeftIcon />
                 </IconButton>
                 <Typography 
-                  variant="h5" 
+                  variant={isMobile ? "body1" : "h5"}
                   fontWeight="500" 
                   color={tableColors.cells.text}
-                  sx={{ minWidth: 160, textAlign: "center" }}
+                  sx={{ minWidth: { xs: 120, md: 160 }, textAlign: "center" }}
                 >
                   {getMonthName(calendarMonth + 1)} {calendarYear}
                 </Typography>
                 <IconButton 
                   onClick={() => navigateMonth("next")}
+                  size={isMobile ? "small" : "medium"}
                   sx={{ 
                     color: colors.taupeAccent[500],
                     "&:hover": { backgroundColor: colors.taupeAccent[100] }
@@ -1068,7 +1126,8 @@ const Dashboard = () => {
               sx={{
                 display: "grid",
                 gridTemplateColumns: "repeat(7, 1fr)",
-                gap: 1,
+                gap: { xs: 0.5, md: 1 },
+                minWidth: { xs: "600px", md: "auto" },
               }}
             >
               {/* Day headers */}

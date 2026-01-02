@@ -4,6 +4,7 @@ import {
   Box,
   Typography,
   useTheme,
+  useMediaQuery,
   FormControl,
   InputLabel,
   Select,
@@ -44,6 +45,9 @@ const Medewerkers = () => {
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
   const isDarkMode = theme.palette.mode === "dark";
+  
+  // ========== RESPONSIVE ==========
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // < 900px
 
   // State
   const [employees, setEmployees] = useState([]);
@@ -604,22 +608,29 @@ const Medewerkers = () => {
   };
   const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
+  // ========== PAGE STYLES ==========
+  const pageContainerStyles = {
+    m: { xs: "16px", md: "20px" },
+    mt: { xs: "0px", md: "-76px" },
+    pb: 4,
+  };
+
   if (loading) {
     return (
-      <Box m="20px" mt="-76px" display="flex" justifyContent="center" pt={10}>
+      <Box sx={pageContainerStyles} display="flex" justifyContent="center" pt={10}>
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box m="20px" mt="-76px" pb={4}>
+    <Box sx={pageContainerStyles}>
       {/* Header */}
-      <Box mb={4}>
-        <Typography variant="h2" color={colors.primary[800]} fontWeight="bold">
+      <Box mb={{ xs: 2, md: 4 }}>
+        <Typography variant={isMobile ? "h3" : "h2"} color={colors.primary[800]} fontWeight="bold">
           Medewerkers
         </Typography>
-        <Typography variant="h5" color={colors.taupeAccent[500]}>
+        <Typography variant={isMobile ? "body1" : "h5"} color={colors.taupeAccent[500]}>
           Beheer contracten en vakantie-uren
         </Typography>
       </Box>

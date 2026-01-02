@@ -4,6 +4,7 @@ import { CssBaseline, ThemeProvider, Box, CircularProgress } from "@mui/material
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import { useAppContext } from "./context/AppContext";
+import { SidebarProvider } from "./context/SidebarContext";
 import Topbar from "./scenes/global/Topbar";
 import Sidebar from "./scenes/global/Sidebar";
 import Dashboard from "./scenes/dashboard";
@@ -18,13 +19,15 @@ import Login from "./scenes/login";
 // Main layout with sidebar and topbar
 const MainLayout = ({ children }) => {
   return (
-    <div className="app">
-      <Sidebar />
-      <main className="content">
-        <Topbar />
-        {children}
-      </main>
-    </div>
+    <SidebarProvider>
+      <div className="app">
+        <Sidebar />
+        <main className="content">
+          <Topbar />
+          {children}
+        </main>
+      </div>
+    </SidebarProvider>
   );
 };
 

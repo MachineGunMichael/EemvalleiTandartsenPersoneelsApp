@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { Sidebar as ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
 import { Box, Typography, useTheme } from "@mui/material";
 import { Link, useLocation } from "react-router-dom";
-import { tokens } from "../../theme";
-import { useAppContext } from "../../context/AppContext";
+import { tokens } from "../../../theme";
+import { useAppContext } from "../../../context/AppContext";
 import DashboardIcon from "@mui/icons-material/DashboardOutlined";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
@@ -48,7 +48,7 @@ const getIcon = (iconName) => {
   }
 };
 
-const Sidebar = () => {
+const SidebarDesktop = () => {
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -66,83 +66,86 @@ const Sidebar = () => {
     }
   }, [location.pathname, availableRoutes]);
 
+  // ========== DESKTOP STYLES ==========
+  const sidebarContainerStyles = {
+    height: "100vh",
+    width: isCollapsed ? "80px" : "400px",
+    transition: "width 0.3s ease",
+    borderRight: "none",
+    backgroundColor: colors.primary[100],
+    position: "relative",
+    // Right border line
+    "&::after": {
+      content: '""',
+      position: "absolute",
+      top: 0,
+      right: 0,
+      height: "100%",
+      width: "1px",
+      backgroundColor: colors.primary[400],
+      zIndex: 1000,
+    },
+    // ProSidebar overrides
+    "& .ps-sidebar-root": {
+      borderRight: "none",
+      width: "100% !important",
+      height: "100% !important",
+      backgroundColor: `${colors.primary[100]} !important`,
+    },
+    "& .ps-sidebar-container": {
+      backgroundColor: `${colors.primary[100]} !important`,
+      height: "100% !important",
+      overflow: "hidden !important",
+    },
+    "& .ps-menu-root": {
+      height: "100%",
+      backgroundColor: `${colors.primary[100]} !important`,
+    },
+    "& .ps-menu-button": {
+      display: "flex !important",
+      flexDirection: "row !important",
+      alignItems: "center !important",
+      justifyContent: "center !important",
+      padding: "40px 20px",
+      color: `${colors.primary[800]} !important`,
+      backgroundColor: "transparent !important",
+    },
+    "& .ps-menu-button .ps-menu-icon": {
+      minWidth: "20px !important",
+      display: "flex !important",
+      alignItems: "center !important",
+      justifyContent: "center !important",
+      marginRight: isCollapsed ? "0 !important" : "25px !important",
+      marginLeft: isCollapsed ? "0 !important" : "5px !important",
+    },
+    "& .ps-menu-button .ps-menu-icon svg": {
+      fontSize: "40px !important",
+    },
+    "& .ps-menu-button .ps-menu-label": {
+      display: isCollapsed ? "none !important" : "inline-flex !important",
+      textAlign: "left !important",
+      padding: "0 !important",
+    },
+    "& .ps-menuitem-root": {
+      width: "100%",
+    },
+    "& .ps-menuitem-root > div": {
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    "& .ps-menu-button:hover": {
+      color: `${colors.taupeAccent[500]} !important`,
+      backgroundColor: "transparent !important",
+    },
+    "& .ps-menuitem-root.ps-active .ps-menu-button": {
+      color: `${colors.taupeAccent[500]} !important`,
+      backgroundColor: "transparent !important",
+    },
+  };
+
   return (
-    <Box
-      sx={{
-        height: "100vh",
-        width: isCollapsed ? "80px" : "400px",
-        transition: "width 0.3s ease",
-        borderRight: "none",
-        backgroundColor: `${colors.primary[100]}`,
-        position: "relative",
-        "&::after": {
-          content: '""',
-          position: "absolute",
-          top: 0,
-          right: 0,
-          height: "100%",
-          width: "1px",
-          backgroundColor: colors.primary[400],
-          zIndex: 1000,
-        },
-        "& .ps-sidebar-root": {
-          borderRight: "none",
-          width: "100% !important",
-          height: "100% !important",
-          backgroundColor: `${colors.primary[100]} !important`,
-        },
-        "& .ps-sidebar-container": {
-          backgroundColor: `${colors.primary[100]} !important`,
-          height: "100% !important",
-          overflow: "hidden !important",
-        },
-        "& .ps-menu-root": {
-          height: "100%",
-          backgroundColor: `${colors.primary[100]} !important`,
-        },
-        "& .ps-menu-button": {
-          display: "flex !important",
-          flexDirection: "row !important",
-          alignItems: "center !important",
-          justifyContent: "center !important",
-          padding: "40px 20px",
-          color: `${colors.primary[800]} !important`,
-          backgroundColor: "transparent !important",
-        },
-        "& .ps-menu-button .ps-menu-icon": {
-          minWidth: "20px !important",
-          display: "flex !important",
-          alignItems: "center !important",
-          justifyContent: "center !important",
-          marginRight: isCollapsed ? "0 !important" : "25px !important",
-          marginLeft: isCollapsed ? "0 !important" : "5px !important",
-        },
-        "& .ps-menu-button .ps-menu-icon svg": {
-          fontSize: "40px !important",
-        },
-        "& .ps-menu-button .ps-menu-label": {
-          display: isCollapsed ? "none !important" : "inline-flex !important",
-          textAlign: "left !important",
-          padding: "0 !important",
-        },
-        "& .ps-menuitem-root": {
-          width: "100%",
-        },
-        "& .ps-menuitem-root > div": {
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        },
-        "& .ps-menu-button:hover": {
-          color: `${colors.taupeAccent[500]} !important`,
-          backgroundColor: "transparent !important",
-        },
-        "& .ps-menuitem-root.ps-active .ps-menu-button": {
-          color: `${colors.taupeAccent[500]} !important`,
-          backgroundColor: "transparent !important",
-        },
-      }}
-    >
+    <Box sx={sidebarContainerStyles}>
       {/* Logo */}
       {!isCollapsed && (
         <>
@@ -192,7 +195,7 @@ const Sidebar = () => {
             backgroundColor: colors.primary[800],
           }}
         >
-          {/* Toggle button when collapsed - absolutely positioned to align with Dashboard text */}
+          {/* Toggle button when collapsed */}
           {isCollapsed && (
             <Box
               onClick={() => setIsCollapsed(!isCollapsed)}
@@ -239,4 +242,5 @@ const Sidebar = () => {
   );
 };
 
-export default Sidebar;
+export default SidebarDesktop;
+
